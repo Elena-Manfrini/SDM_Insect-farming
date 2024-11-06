@@ -1,4 +1,3 @@
-setwd("~/Documents/Documents/Eléna/Thèse_Eléna/2024-2025/04_SDMs/Reproductibility")
 
 library(terra)
 library(sf)
@@ -21,7 +20,7 @@ raster_list <- list()
 for (i in 1:length(Vect_Vars)) {
   Name_Var <- Vect_Vars[i] # Get the variable name
   # Load each raster file as a SpatRaster object
-  raster_path <- paste0("./data/donnees_brutes/bioclim/", Name_Var, ".tif")
+  raster_path <- paste0("data/raw/bioclim/", Name_Var, ".tif")
   raster <- rast(raster_path)
   # Add the raster to the list with its corresponding variable name
   raster_list[[Name_Var]] <- raster
@@ -37,11 +36,11 @@ Rastack <- rast(raster_list) # transform raster list into stack
 r <- synchroniseNA(Rastack) ### from virtual species package
 
 # Save the final raster stack with all variables
-writeRaster(r, filename = "./data/donnees_brutes/bioclim/baseline.tif",overwrite = TRUE)
+writeRaster(r, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE)
 
 ############# 2. Check colineratity
 
-Rastack <- rast("data/donnees_brutes/bioclim/baseline.tif")
+Rastack <- rast("data/raw/bioclim/baseline.tif")
 
 #Create a PNG to store the output image of the collinearity tree
 png("./output/collinearity_groups.png") # pour faire l'image avec l'arbre sur le disque
@@ -63,5 +62,5 @@ Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_
 r_fin <- synchroniseNA(Rastack_fin) ### from virtual species package
 
 ## Save the final definitive raster
-writeRaster(r_fin, filename = "./data/donnees_brutes/bioclim/final_baseline.tif", overwrite = TRUE)
+writeRaster(r_fin, filename = "./data/raw/bioclim/final_baseline.tif", overwrite = TRUE)
 
