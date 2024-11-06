@@ -1,4 +1,3 @@
-
 library(terra)
 library(sf)
 library(Rarity) # plot des correlations multiples

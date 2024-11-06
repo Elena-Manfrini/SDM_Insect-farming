@@ -1,4 +1,3 @@
-setwd("~/Documents/Documents/Eléna/Thèse_Eléna/2024-2025/04_SDMs/Reproductibility")
 
 library(terra)
 library(sf)
