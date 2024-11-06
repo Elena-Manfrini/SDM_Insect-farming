@@ -1,4 +1,3 @@
-
 library(terra)
 library(sf)
 library(Rarity) # plot des correlations multiples
@@ -70,8 +69,6 @@ midpoints <- function(x, dp=2){
 
 # Chargement des données environnementales
 baseline <- rast("data/donnees_brutes/bioclim/final_baseline.tif")
-# Renommer manuellement
-names(baseline) <- c("CHELSA_bio5", "CHELSA_bio7", "CHELSA_hurs_min", "CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2010CE")
 
 # Calculer les valeurs environnementales (quantiles)
 values <- values(baseline) # recuperation valeurs ; reprend les NA des oceans
