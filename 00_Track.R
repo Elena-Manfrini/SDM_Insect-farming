@@ -4,6 +4,8 @@
 dir.create("data")
 dir.create("data/raw")
 dir.create("data/raw/bioclim")
+dir.create("data/raw/bioclim/baseline")
+dir.create("data/raw/bioclim/land")
 dir.create("data/raw/occurences")
 
 # model per species
