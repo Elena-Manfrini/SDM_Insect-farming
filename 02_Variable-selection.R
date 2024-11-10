@@ -92,4 +92,4 @@ dev.off()
 Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2010CE")]]
 
 ## Save the final definitive raster
-writeRaster(Rastack_fin, filename = "./data/raw/bioclim/baseline/final_baseline.tif", overwrite = TRUE)
+writeRaster(Rastack_fin, filename = "data/raw/bioclim/baseline/final_baseline.tif", overwrite = TRUE)
