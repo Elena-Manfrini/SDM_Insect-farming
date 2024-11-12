@@ -212,97 +212,6 @@ for (i in 1:length(Vect_Sp)) {
   var.occ_3 <- var.occ_2[-outs, ] ## Environmental variables withouth extreme
   Occu_4 <- Occu_3[-outs, ] ## Occurences withouth extreme
   
-  ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
-  # 2.1.1 Visualize data ####
-  # 2.1.1.a Datavisualisation of deleted occurences data
-  # Plot raw data (var.occ) as red dots
-  plot(var.occ$CHELSA_bio7, var.occ$CHELSA_bio5,
-       xlab = "CHELSA_bio7",  # Label for the x-axis
-       ylab = "CHELSA_bio5",  # Label for the y-axis
-       pch = 19,  # Points as solid dots
-       col = "red",  # Color of the raw data points (missing data)
-       main = paste0(Sp," Raw and Filtered Occurence Data (data deleted in Red)"),
-       xlim = range(c(var.occ$CHELSA_bio7, var.occ_3$CHELSA_bio7)),
-       ylim = range(c(var.occ$CHELSA_bio5, var.occ_3$CHELSA_bio5)))
-  
-  # Add filtered data (var.occ_3) as black dots
-  points(var.occ_3$CHELSA_bio7, var.occ_3$CHELSA_bio5,
-         pch = 19,  # Points as solid dots
-         col = "black")  # Color of the filtered data points
-  
-  # 2.1.1.b Data visualisation of restricted environmental space for 2 variables
-  ggplot() +
-    # Add a rectangle for the extent of the env_space dataframe
-    geom_rect(aes(xmin = min(env_space$CHELSA_bio5), xmax = max(env_space$CHELSA_bio5), 
-                  ymin = min(env_space$CHELSA_bio7), ymax = max(env_space$CHELSA_bio7)),
-              fill = "green", alpha = 0.5) +
-    # Add a rectangle for the extent of the Convex_hull dataframe
-    geom_rect(aes(xmin = min(var.occ_3$CHELSA_bio5), xmax = max(var.occ_3$CHELSA_bio5), 
-                  ymin = min(var.occ_3$CHELSA_bio7), ymax = max(var.occ_3$CHELSA_bio7)),
-              fill = "lightblue") +
-    # Plot the points for var.occ as red dots
-    geom_point(data = var.occ, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "red", size = 1) +
-    # Plot points for the Convex_hull dataframe
-    geom_point(data = var.occ_3, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "black") +
-    
-    # Customize plot limits for better visualization
-    xlim(min(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) - 1, 
-         max(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) + 1) +
-    ylim(min(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) - 1, 
-         max(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) + 1) +
-    # Add labels and title
-    labs(title = "Extent Comparison Between env_space and Convex_hull",
-         x = "CHELSA_bio5", y = "CHELSA_bio7") +
-    theme_minimal()
-  
-  # # 2.1.1.c Save a final dataset with coordinates and variable values
-  # Occu_2$ID <- seq(1, nrow(Occu_2))
-  # merged.occ <- merge(Occu_2,var.occ_3 , by = "ID")
-  # merged.occ <- merged.occ %>%
-  #   dplyr::select(-ID, -Observed)
-  # 
-  # # Save occurrences to an Excel file
-  # xlsx::write.xlsx(merged.occ, paste0("data/Filtered_occurences/Occ&Var_", Sp, ".xlsx"), row.names = F)
-
-  #  2.1.1.c Visualize environmental value range
-  # Reshape the data into long format for ggplot
-  var.occ_3_long <- var.occ_3[, -1] %>%
-    tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Values")
-  
-  # Create a list to store each ggplot
-  plot_list <- list()
-  # Define a list of colors for each variable
-  colors <- c("CHELSA_bio5" = "brown1",   # Blue
-              "CHELSA_bio7" = "brown",   # Orange
-              "CHELSA_hurs_min" = "#2BDBCA", # Green
-              "CHELSA_hurs_range" = "#488680", # Red
-              "CHELSA_npp" = "green4",     # Purple
-              "globalCropland_2010CE" = "#DB792C")  # Brown
-  
-  # Loop over each environmental variable and create a boxplot for each
-  for (var in unique(var.occ_3_long$Variable)) {
-    plot_obj <- ggplot(var.occ_3_long[var.occ_3_long$Variable == var, ], aes(x = Variable, y = Values)) +
-      geom_boxplot(fill = colors[var], color = "black", outlier.shape = 16) +
-      labs(x = NULL, y = NULL, title = var) +
-      theme_minimal() +
-      theme(axis.text.x = element_blank(),  # Remove x-axis labels for individual plots
-            axis.title.x = element_blank(),
-            axis.text.y = element_text(size = 10),  # Adjust size of y-axis labels
-            axis.title.y = element_text(size = 12)) +
-      scale_color_manual(values = colors)   +    # Use colors as specified
-      guides(color = "none")  # Remove the color legend
-    # Add the plot to the list
-    plot_list[[var]] <- plot_obj
-  }
-  
-  # Arrange all the plots in a grid
-  all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
-                        top = Sp)
-  # Save the grid to a PNG file
-  ggsave(paste0("output/Filt_occurences_ggplot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
-  
-  ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
-  
   ### 2.4 Remove duplicated occurrence data in environmental variable intervals
   # New calcul of intervals
   env.itvl_2 <- sapply(colnames(var.occ_3[,-1]), function(x, combs, seqs.)
@@ -353,21 +262,27 @@ for (i in 1:length(Vect_Sp)) {
     # Save occurrences to an Excel file
     xlsx::write.xlsx(Fin_occ_var, paste0("data/Filtered_occurences/Occ&Var_", Sp, ".xlsx"), row.names = F)
     
+    ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
+    
+    # 3 Data visualisation ####
+    # 3.1 Removed occurences
+    # 3.1.1 Map
     
     # Save the map as a PNG
-    # Save the grid to a PNG file
     png(paste0("output/Filt_occurences_ggplot/Occurence_plot_", Sp, ".png"), width = 800, height = 600)  # Adjust dimensions as needed
     
     map("world", xlim = range(Rastab$x), ylim = range(Rastab$y)) # Map occurences
-    points(Occu[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
-    points(Occu_5[ , c("x", "y")], pch = 20, cex = 0.5, col = "darkgreen")
+    points(Occu_2[ , c("x", "y")], pch = 20, cex = 0.5, col = "#FFCDD2")
+    points(Occu_3[ , c("x", "y")], pch = 20, cex = 0.5, col = "#F44336")
+    points(Occu_4[ , c("x", "y")], pch = 20, cex = 0.5, col = "#D32F2F")
+    points(Occu_5[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
     
     # Add a title
-    title(main = paste0("Occurrence of", Sp))
+    title(main = paste0("Occurrence of ", Sp))
     # Add a legend
     legend("left",                        # Position of the legend
            legend = c("Final", "Deleted"),  # Labels
-           col = c("darkgreen", "red"),       # Colors matching the points
+           col = c("black", "#D32F2F"),       # Colors matching the points
            pch = 20,                          # Point symbol used in the plot
            pt.cex = 1.5,                      # Point size in the legend
            cex = 1,                           # Text size in the legend
@@ -375,6 +290,99 @@ for (i in 1:length(Vect_Sp)) {
     
     # Close the PNG device and save the image
     dev.off()
+
+    # 3.1.2 2D visualisation
+    # a. Plot with 2 environmental variables
+    
+    # Plot raw data (var.occ) as red dots
+    plot(var.occ$CHELSA_bio7, var.occ$CHELSA_bio5,
+         xlab = "CHELSA_bio7",  # Label for the x-axis
+         ylab = "CHELSA_bio5",  # Label for the y-axis
+         pch = 19,  # Points as solid dots
+         col = "#ffcdd2",  # Color of the raw data points (missing data)
+         main = paste0(Sp," Raw and Filtered Occurence Data (data deleted in Red)"),
+         xlim = range(c(var.occ$CHELSA_bio7, var.occ$CHELSA_bio7)),
+         ylim = range(c(var.occ$CHELSA_bio5, var.occ$CHELSA_bio5)))
+    
+    # Add filtered data (var.occ_3) as black dots
+    points(var.occ_2$CHELSA_bio7, var.occ_2$CHELSA_bio5,
+           pch = 19,  # Points as solid dots
+           col = "#f44336")  # Color of the filtered data points
+    
+    # Add filtered data (var.occ_3) as black dots
+    points(var.occ_3$CHELSA_bio7, var.occ_3$CHELSA_bio5,
+           pch = 19,  # Points as solid dots
+           col = "darkred")  # Color of the filtered data points
+    
+    # Add filtered data (var.occ_3) as black dots
+    points(var.occ_4$CHELSA_bio7, var.occ_4$CHELSA_bio5,
+           pch = 19,  # Points as solid dots
+           col = "black")  # Color of the filtered data points
+    
+    # b. 2D environmental space
+    ggplot() +
+      # Add a rectangle for the extent of the env_space dataframe
+      geom_rect(aes(xmin = min(env_space$CHELSA_bio5), xmax = max(env_space$CHELSA_bio5), 
+                    ymin = min(env_space$CHELSA_bio7), ymax = max(env_space$CHELSA_bio7)),
+                fill = "green", alpha = 0.5) +
+      # Add a rectangle for the extent of the Convex_hull dataframe
+      geom_rect(aes(xmin = min(var.occ_4$CHELSA_bio5), xmax = max(var.occ_4$CHELSA_bio5), 
+                    ymin = min(var.occ_4$CHELSA_bio7), ymax = max(var.occ_4$CHELSA_bio7)),
+                fill = "lightblue") +
+      # Plot the points for var.occ as red dots
+      geom_point(data = var.occ, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "red", size = 1) +
+      # Plot points for the Convex_hull dataframe
+      geom_point(data = var.occ_4, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "black") +
+      
+      # Customize plot limits for better visualization
+      xlim(min(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) - 1, 
+           max(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) + 1) +
+      ylim(min(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) - 1, 
+           max(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) + 1) +
+      # Add labels and title
+      labs(title = "Extent Comparison Between env_space and Convex_hull",
+           x = "CHELSA_bio5", y = "CHELSA_bio7") +
+      theme_minimal()
+    
+    # 3.2 Environmental range
+    
+    # Reshape the data into long format for ggplot
+    var.occ_4_long <- var.occ_4[, -1] %>%
+      tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Values")
+    
+    # Create a list to store each ggplot
+    plot_list <- list()
+    # Define a list of colors for each variable
+    colors <- c("CHELSA_bio5" = "brown1",   # Blue
+                "CHELSA_bio7" = "brown",   # Orange
+                "CHELSA_hurs_min" = "#2BDBCA", # Green
+                "CHELSA_hurs_range" = "#488680", # Red
+                "CHELSA_npp" = "green4",     # Purple
+                "globalCropland_2010CE" = "#DB792C")  # Brown
+    
+    # Loop over each environmental variable and create a boxplot for each
+    for (var in unique(var.occ_4_long$Variable)) {
+      plot_obj <- ggplot(var.occ_4_long[var.occ_4_long$Variable == var, ], aes(x = Variable, y = Values)) +
+        geom_boxplot(fill = colors[var], color = "black", outlier.shape = 16) +
+        labs(x = NULL, y = NULL, title = var) +
+        theme_minimal() +
+        theme(axis.text.x = element_blank(),  # Remove x-axis labels for individual plots
+              axis.title.x = element_blank(),
+              axis.text.y = element_text(size = 10),  # Adjust size of y-axis labels
+              axis.title.y = element_text(size = 12)) +
+        scale_color_manual(values = colors)   +    # Use colors as specified
+        guides(color = "none")  # Remove the color legend
+      # Add the plot to the list
+      plot_list[[var]] <- plot_obj
+    }
+    
+    # Arrange all the plots in a grid
+    all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
+                              top = Sp)
+    # Save the grid to a PNG file
+    ggsave(paste0("output/Filt_occurences_ggplot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    
+    ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 }
   #################### 3. Pseudo absence generation
     
