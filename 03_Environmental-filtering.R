@@ -7,7 +7,8 @@ library(geodata)
 library(openxlsx)
 library(ggplot2)
 library(reshape2) 
-library(gridExtra) 
+library(gridExtra)
+library(biomod2)
 
 ###################### Define computeEnvCombinations function ######################
 computeEnvCombinations <- function(env.stack,
@@ -396,7 +397,7 @@ for (i in 1:length(Vect_Sp)) {
   pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE ## = presence
   
   # presence + Envirnomental variables
-  rundata <- data.frame(
+  cursp.rundata <- data.frame(
     Observed = 1, # Non-duplicated species occurrences
     var.occ_4[,-1])
   
@@ -406,21 +407,27 @@ for (i in 1:length(Vect_Sp)) {
   plot = F
   for(PA in 1:runs.PA){
     try({
+      
       # Sampling pseudo-absences outside the convex hull
-      # AND not on presence points
       pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
                                 size = number.PA,
-                                replace = FALSE) #
+                                replace = FALSE) 
       
-      rundata <- rbind.data.frame(rundata,
+      #Combine environmental of observed and pseudoabscence data
+      cursp.rundata <- rbind.data.frame(cursp.rundata,
                                         data.frame(Observed = NA,
                                                    envir.space$unique.conditions.in.env[pseudoabs, ])) # Bind environmental data of observed and randomly selected.
       
+      #Combine environmental of observed and pseudoabscence coordinates
       coord <- rbind(coord,
                         data.frame(xyFromCell(Rastack[[1]],pseudoabs))) ## Get coordinates of NA + thoose of observed values
       
-      pseudoabs.biomod.table[(nrow(cur.sp.pixels.filt) + 1 + (PA - 1) * number.PA):
-                               (nrow(cur.sp.pixels.filt) + PA * number.PA), PA] <- TRUE
+      #Create a dataframe which contains nrow(Fin_occ_var) +  number.PA*nrow(Fin_occ_var)
+      # Write down TRUE in corresponding PA estimation: 
+      # if PA = 1, TRUE values will be from 0:2*nrow(Fin_occ_var)
+      # if PA = 2, TRUE values will be from 0:nrow(Fin_occ_var) and after nrow(Fin_occ_var) (Space of nrow(Fin_occ_var) from PA = 1) during nrow(Fin_occ_var)
+      pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
+                               (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
     })
     
      if(plot){
@@ -435,10 +442,46 @@ for (i in 1:length(Vect_Sp)) {
                     xy.coordinates = coord) ## creation liste avec coordonnées des occurences + pseudo abs (5 car 5 echantillonages) 
     
     coorxy <- results$xy.coordinates
-    
     occurrences <- results$occurrence.environment.matrix
-    
     PATable <- results$pseudoabs.biomod.table
+    
+    # Chemin de sauvegarde
+    save_dir <- paste0("models/", Sp)
+    
+    # Formatage des données pour BIOMOD2
+    run_data <- BIOMOD_FormatingData(
+      resp.name = Sp, 
+      resp.var = occurrences$Observed, 
+      expl.var = Rastack,   # Variables prédictives (rasterstack propre à l'espèce)
+      dir.name = save_dir,  # Dossier de stockage des modèles
+      resp.xy = coorxy,     # Coordonnées xy des présences et pseudo-absences
+      PA.strategy = 'user.defined',
+      PA.user.table = filtered.records$pseudoabs.biomod.table
+    )
+    
+    
+    ##############################################################################
+    ##############################################################################
+    
+    table_cv <- bm_CrossValidation(
+      bm.format = run_data,
+      strategy = "kfold",
+      k = 5,
+      nb.rep = 1,
+      balance = "both") ### aleatoire --> Changer en geographique ? Environmental ?
+    
+    saveRDS(run_data, file = paste0(save_dir,Sp))
+    
+    calib_summary <-
+      summary(run_data, calib.lines =  table_cv) %>%
+      filter(dataset == "calibration") ## separation jeu de données en 5
+    
+    iwp <- (10^6)^(1 - occurrences) ## parametre biomod
+    
+    RF_param_list <- NULL
+    XGBOOST_param_list <- NULL
+    MAXNET_param_list <- NULL
     
   }
 }
+
