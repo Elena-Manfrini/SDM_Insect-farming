@@ -9,6 +9,9 @@ library(ggplot2)
 library(reshape2) 
 library(gridExtra)
 library(biomod2)
+library(maps)
+library(tidyterra)
+library(ggtext)
 
 ###################### Define computeEnvCombinations function ######################
 computeEnvCombinations <- function(env.stack,
@@ -111,9 +114,6 @@ envir.space <- computeEnvCombinations(
   plot = F,
   vars.to.plot = 1:5) 
 
-# Environmental space 2 dimensions 
-env_space <- as.data.frame(envir.space$unique.conditions.in.env[,c("CHELSA_bio5", "CHELSA_bio7")])
-
 ############# 2. Occurrences data filtering
 
 # Species name
@@ -188,7 +188,8 @@ for (i in 1:length(Vect_Sp)) {
   }else{
     Occu_3 <- Occu_2 
   } 
-
+  var.occ_2 <- var.occ[which(Occu_3$Observed == 1), ]
+  
   ### 2.3 Removing occurrences outliers for the convex hull calculations (2,5% high and 2,5% low extreme)
   
   # Replace interval ranges by midpoints for unique occurrences in the environmental space
@@ -196,7 +197,6 @@ for (i in 1:length(Vect_Sp)) {
     replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
   }, int.to.replace = env.itvl_2, replacing.values = envir.space$detailed.intervals) ### valeurs variables correspondant aux occurences uniques
   
-  var.occ_2 <- var.occ[which(Occu_3$Observed == 1), ]
  
    # Removing outliers for the convex hull calculations
   convex.hull.interval = 0.05 # pour eliminer les 2,5% des extremes hauts et bas
@@ -208,37 +208,40 @@ for (i in 1:length(Vect_Sp)) {
     return(which(df[, x] <= qt[1] | df[, x] >= qt[2]))
   }, df = var.occ_2)
   
-  outs <- unique(unlist(outs)) ## cellules resultantes uniques les plus extremes
+  outs <- unique(unlist(outs))
   
-  var.occ_3 <- var.occ_2[-outs, ] ## Environmental variables withouth extreme
-  Occu_4 <- Occu_3[-outs, ] ## Occurences withouth extreme
+  var.occ_3 <- var.occ_2[-outs, ] ## Environmental variables without extreme
+  Occu_4 <- Occu_3[-outs, ] ## Occurences without extreme
   
   ### 2.4 Remove duplicated occurrence data in environmental variable intervals
   # New calcul of intervals
-  env.itvl_2 <- sapply(colnames(var.occ_3[,-1]), function(x, combs, seqs.)
-    cut(combs[, x], breaks = seqs.[[x]], include.lowest = TRUE, right = FALSE),
-    combs = var.occ_3, seqs. = var.intervals) #### Dans quelles cases se situent les occurences (moins les extremes)
+  # env.itvl_3 <- sapply(colnames(var.occ_3[,-1]), function(x, combs, seqs.)
+  #   cut(combs[, x], breaks = seqs.[[x]], include.lowest = TRUE, right = FALSE),
+  #   combs = var.occ_3, seqs. = var.intervals) #### Dans quelles cases se situent les occurences (moins les extremes)
   
-  # Remove duplicates
-  duplicated.cells <- which(duplicated(env.itvl_2)) ### recreate intervals = new duplicated cells
+  env.itvl_3 <- env.itvl_2[-outs, ] # remove intervals which correspond to extrem combination values
+    
+  # # Remove duplicates
+  # duplicated.cells <- which(duplicated(env.itvl_3)) ### recreate intervals = new duplicated cells
   
-  if(length(duplicated.cells)){
-    env.itvl_3 <- env.itvl_2[-duplicated.cells, ]
-    var.occ_4 <- var.occ_3[-duplicated.cells, ]
-    Occu_5 <- Occu_4[-duplicated.cells, ]
-  } 
+  # if(length(duplicated.cells)){
+  #   env.itvl_4 <- env.itvl_3[-duplicated.cells, ]
+  #   var.occ_4 <- var.occ_3[-duplicated.cells, ]
+  #   Occu_5 <- Occu_4[-duplicated.cells, ]
+  # } 
   
-  # Replace values by mid points of intervals : chaque occurrences va avoir une valeur qui sera la distance par rapport a la mediane de l'hyper volume.
-  cur.sp.pixels.filt <- sapply(colnames(env.itvl_3), function(x, int.to.replace, replacing.values)
-  {
-    replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
-  }, int.to.replace = env.itvl_3, replacing.values = envir.space$detailed.intervals)
-  
+  # # # Replace values by mid points of intervals : chaque occurrences va avoir une valeur qui sera la distance par rapport a la mediane de l'hyper volume.
+  #  cur.sp.pixels.filt <- sapply(colnames(env.itvl_3), function(x, int.to.replace, replacing.values)
+  #  {
+  #    replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
+  #  }, int.to.replace = env.itvl_3, replacing.values = envir.space$detailed.intervals)
+  # 
+  cur.sp.pixels.filt <- cur.sp.pixels[-outs,]
   
   if(nrow(cur.sp.pixels.filt) >= 6){  # If there is enough points we use occurrence without outliers
     # else we use all occurrences
     cursp.convhull <- geometry::convhulln(cur.sp.pixels.filt,
-                                options = "Qt"
+                                          # options = "Qt"
     ) 
   }else{
     cursp.convhull <- convhulln(cur.sp.pixels[Occu_3$Observed == 1, ]) 
@@ -248,15 +251,24 @@ for (i in 1:length(Vect_Sp)) {
   cursp.inhull <- geometry::inhulln(cursp.convhull, 
                           as.matrix(envir.space$unique.conditions.in.env))
   
+  convhull_coord_values <- envir.space$coords[cursp.inhull,]
+  convhull_coord_values <- as.data.frame(convhull_coord_values)
+
+  # ## Visualisation
+  # # Plot the base raster map
+  # plot(Rastack[[1]])
+  # # Plot points from 'test' on the map
+  # points(coord.conv_hull$x, coord.conv_hull$y, pch = 20, col = "blue", cex = 0.7) ## convex_hull
+  
+  
   presencepixels <- apply(envir.space$unique.conditions.in.env, 1,paste, collapse = " ")   %in% ## For each row, the env values are concatenated into a single string with spaces between them.
     #check if elements of one vector are present in another. 
     apply(cur.sp.pixels.filt, 1, paste, collapse = " ") # same here
   #It returns a logical vector (TRUE or FALSE), indicating whether each element in the first vector is found in the second vector
   # e.g 280 env condition at species occurrences are found inside the convex hull (all occurrences in the case of "Alphitobius diaperinus")
-
   
   # Final dataframe of occurences and their respective variable values
-    Fin_occ_var <- cbind(Occu_5, var.occ_4)
+    Fin_occ_var <- cbind(Occu_4, var.occ_3)
     Fin_occ_var <- Fin_occ_var %>%
     dplyr::select(-ID)
 
@@ -265,202 +277,196 @@ for (i in 1:length(Vect_Sp)) {
     
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
-    # 3 Data visualisation ####
-    # 3.1 Removed occurences
-    # 3.1.1 Map
-    
-    # Save the map as a PNG
-    png(paste0("output/Filt_occurences_ggplot/Occurence_plot_", Sp, ".png"), width = 800, height = 600)  # Adjust dimensions as needed
-    
-    map("world", xlim = range(Rastab$x), ylim = range(Rastab$y)) # Map occurences
-    points(Occu_2[ , c("x", "y")], pch = 20, cex = 0.5, col = "#FFCDD2")
-    points(Occu_3[ , c("x", "y")], pch = 20, cex = 0.5, col = "#F44336")
-    points(Occu_4[ , c("x", "y")], pch = 20, cex = 0.5, col = "#D32F2F")
-    points(Occu_5[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
-    
-    # Add a title
-    title(main = paste0("Occurrence of ", Sp))
-    # Add a legend
-    legend("left",                        # Position of the legend
-           legend = c("Final", "Deleted"),  # Labels
-           col = c("black", "#D32F2F"),       # Colors matching the points
-           pch = 20,                          # Point symbol used in the plot
-           pt.cex = 1.5,                      # Point size in the legend
-           cex = 1,                           # Text size in the legend
-           bty = "n")  
-    
-    # Close the PNG device and save the image
-    dev.off()
-
-    # 3.1.2 2D visualisation
-    # a. Plot with 2 environmental variables
-    
-    # Plot raw data (var.occ) as red dots
-    plot(var.occ$CHELSA_bio7, var.occ$CHELSA_bio5,
-         xlab = "CHELSA_bio7",  # Label for the x-axis
-         ylab = "CHELSA_bio5",  # Label for the y-axis
-         pch = 19,  # Points as solid dots
-         col = "#ffcdd2",  # Color of the raw data points (missing data)
-         main = paste0(Sp," Raw and Filtered Occurence Data (data deleted in Red)"),
-         xlim = range(c(var.occ$CHELSA_bio7, var.occ$CHELSA_bio7)),
-         ylim = range(c(var.occ$CHELSA_bio5, var.occ$CHELSA_bio5)))
-    
-    # Add filtered data (var.occ_3) as black dots
-    points(var.occ_2$CHELSA_bio7, var.occ_2$CHELSA_bio5,
-           pch = 19,  # Points as solid dots
-           col = "#f44336")  # Color of the filtered data points
-    
-    # Add filtered data (var.occ_3) as black dots
-    points(var.occ_3$CHELSA_bio7, var.occ_3$CHELSA_bio5,
-           pch = 19,  # Points as solid dots
-           col = "darkred")  # Color of the filtered data points
-    
-    # Add filtered data (var.occ_3) as black dots
-    points(var.occ_4$CHELSA_bio7, var.occ_4$CHELSA_bio5,
-           pch = 19,  # Points as solid dots
-           col = "black")  # Color of the filtered data points
-    
-    # b. 2D environmental space
-    ggplot() +
-      # Add a rectangle for the extent of the env_space dataframe
-      geom_rect(aes(xmin = min(env_space$CHELSA_bio5), xmax = max(env_space$CHELSA_bio5), 
-                    ymin = min(env_space$CHELSA_bio7), ymax = max(env_space$CHELSA_bio7)),
-                fill = "green", alpha = 0.5) +
-      # Add a rectangle for the extent of the Convex_hull dataframe
-      geom_rect(aes(xmin = min(var.occ_4$CHELSA_bio5), xmax = max(var.occ_4$CHELSA_bio5), 
-                    ymin = min(var.occ_4$CHELSA_bio7), ymax = max(var.occ_4$CHELSA_bio7)),
-                fill = "lightblue") +
-      # Plot the points for var.occ as red dots
-      geom_point(data = var.occ, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "red", size = 1) +
-      # Plot points for the Convex_hull dataframe
-      geom_point(data = var.occ_4, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "black") +
-      
-      # Customize plot limits for better visualization
-      xlim(min(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) - 1, 
-           max(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) + 1) +
-      ylim(min(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) - 1, 
-           max(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) + 1) +
-      # Add labels and title
-      labs(title = "Extent Comparison Between env_space and Convex_hull",
-           x = "CHELSA_bio5", y = "CHELSA_bio7") +
-      theme_minimal()
-    
-    # 3.2 Environmental range
-    
-    # Reshape the data into long format for ggplot
-    var.occ_4_long <- var.occ_4[, -1] %>%
-      tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Values")
-    
-    # Create a list to store each ggplot
-    plot_list <- list()
-    # Define a list of colors for each variable
-    colors <- c("CHELSA_bio5" = "brown1",   # Blue
-                "CHELSA_bio7" = "brown",   # Orange
-                "CHELSA_hurs_min" = "#2BDBCA", # Green
-                "CHELSA_hurs_range" = "#488680", # Red
-                "CHELSA_npp" = "green4",     # Purple
-                "globalCropland_2010CE" = "#DB792C")  # Brown
-    
-    # Loop over each environmental variable and create a boxplot for each
-    for (var in unique(var.occ_4_long$Variable)) {
-      plot_obj <- ggplot(var.occ_4_long[var.occ_4_long$Variable == var, ], aes(x = Variable, y = Values)) +
-        geom_boxplot(fill = colors[var], color = "black", outlier.shape = 16) +
-        labs(x = NULL, y = NULL, title = var) +
-        theme_minimal() +
-        theme(axis.text.x = element_blank(),  # Remove x-axis labels for individual plots
-              axis.title.x = element_blank(),
-              axis.text.y = element_text(size = 10),  # Adjust size of y-axis labels
-              axis.title.y = element_text(size = 12)) +
-        scale_color_manual(values = colors)   +    # Use colors as specified
-        guides(color = "none")  # Remove the color legend
-      # Add the plot to the list
-      plot_list[[var]] <- plot_obj
-    }
-    
-    # Arrange all the plots in a grid
-    all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
-                              top = Sp)
-    # Save the grid to a PNG file
-    ggsave(paste0("output/Filt_occurences_ggplot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
-    
+    # # 3 Data visualisation ####
+    # # 3.1 Removed occurences
+    # # 3.1.1 Map
+    # 
+    # # Save the map as a PNG
+    # png(paste0("output/Filt_occurences_ggplot/Occurence_plot_", Sp, ".png"), width = 800, height = 600)  # Adjust dimensions as needed
+    # 
+    # map("world", xlim = range(Rastab$x), ylim = range(Rastab$y)) # Map occurences
+    # points(Occu_2[ , c("x", "y")], pch = 20, cex = 0.5, col = "#FFCDD2")
+    # points(Occu_3[ , c("x", "y")], pch = 20, cex = 0.5, col = "#F44336")
+    # points(Occu_4[ , c("x", "y")], pch = 20, cex = 0.5, col = "#D32F2F")
+    # points(Occu_5[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
+    # 
+    # # Add a title
+    # title(main = paste0("Occurrence of ", Sp))
+    # # Add a legend
+    # legend("left",                        # Position of the legend
+    #        legend = c("Final", "Deleted"),  # Labels
+    #        col = c("black", "#D32F2F"),       # Colors matching the points
+    #        pch = 20,                          # Point symbol used in the plot
+    #        pt.cex = 1.5,                      # Point size in the legend
+    #        cex = 1,                           # Text size in the legend
+    #        bty = "n")  
+    # 
+    # # Close the PNG device and save the image
+    # dev.off()
+    # 
+    # # 3.1.2 2D visualisation
+    # # a. Plot with 2 environmental variables
+    # 
+    # # Plot raw data (var.occ) as red dots
+    # plot(var.occ$CHELSA_bio7, var.occ$CHELSA_bio5,
+    #      xlab = "CHELSA_bio7",  # Label for the x-axis
+    #      ylab = "CHELSA_bio5",  # Label for the y-axis
+    #      pch = 19,  # Points as solid dots
+    #      col = "#ffcdd2",  # Color of the raw data points (missing data)
+    #      main = paste0(Sp," Raw and Filtered Occurence Data (data deleted in Red)"),
+    #      xlim = range(c(var.occ$CHELSA_bio7, var.occ$CHELSA_bio7)),
+    #      ylim = range(c(var.occ$CHELSA_bio5, var.occ$CHELSA_bio5)))
+    # 
+    # # Add filtered data (var.occ_3) as black dots
+    # points(var.occ_2$CHELSA_bio7, var.occ_2$CHELSA_bio5,
+    #        pch = 19,  # Points as solid dots
+    #        col = "#f44336")  # Color of the filtered data points
+    # 
+    # # Add filtered data (var.occ_3) as black dots
+    # points(var.occ_3$CHELSA_bio7, var.occ_3$CHELSA_bio5,
+    #        pch = 19,  # Points as solid dots
+    #        col = "darkred")  # Color of the filtered data points
+    # 
+    # # Add filtered data (var.occ_3) as black dots
+    # points(var.occ_4$CHELSA_bio7, var.occ_4$CHELSA_bio5,
+    #        pch = 19,  # Points as solid dots
+    #        col = "black")  # Color of the filtered data points
+    # 
+    # # b. 2D environmental space
+    # ggplot() +
+    #   # Add a rectangle for the extent of the env_space dataframe
+    #   geom_rect(aes(xmin = min(env_space$CHELSA_bio5), xmax = max(env_space$CHELSA_bio5), 
+    #                 ymin = min(env_space$CHELSA_bio7), ymax = max(env_space$CHELSA_bio7)),
+    #             fill = "green", alpha = 0.5) +
+    #   # Add a rectangle for the extent of the Convex_hull dataframe
+    #   geom_rect(aes(xmin = min(var.occ_4$CHELSA_bio5), xmax = max(var.occ_4$CHELSA_bio5), 
+    #                 ymin = min(var.occ_4$CHELSA_bio7), ymax = max(var.occ_4$CHELSA_bio7)),
+    #             fill = "lightblue") +
+    #   # Plot the points for var.occ as red dots
+    #   geom_point(data = var.occ, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "red", size = 1) +
+    #   # Plot points for the Convex_hull dataframe
+    #   geom_point(data = var.occ_4, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "black") +
+    #   
+    #   # Customize plot limits for better visualization
+    #   xlim(min(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) - 1, 
+    #        max(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) + 1) +
+    #   ylim(min(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) - 1, 
+    #        max(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) + 1) +
+    #   # Add labels and title
+    #   labs(title = "Extent Comparison Between env_space and Convex_hull",
+    #        x = "CHELSA_bio5", y = "CHELSA_bio7") +
+    #   theme_minimal()
+    # 
+    # # 3.2 Environmental range
+    # 
+    # # Reshape the data into long format for ggplot
+    # var.occ_4_long <- var.occ_4[, -1] %>%
+    #   tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Values")
+    # 
+    # # Create a list to store each ggplot
+    # plot_list <- list()
+    # # Define a list of colors for each variable
+    # colors <- c("CHELSA_bio5" = "brown1",   # Blue
+    #             "CHELSA_bio7" = "brown",   # Orange
+    #             "CHELSA_hurs_min" = "#2BDBCA", # Green
+    #             "CHELSA_hurs_range" = "#488680", # Red
+    #             "CHELSA_npp" = "green4",     # Purple
+    #             "globalCropland_2010CE" = "#DB792C")  # Brown
+    # 
+    # # Loop over each environmental variable and create a boxplot for each
+    # for (var in unique(var.occ_4_long$Variable)) {
+    #   plot_obj <- ggplot(var.occ_4_long[var.occ_4_long$Variable == var, ], aes(x = Variable, y = Values)) +
+    #     geom_boxplot(fill = colors[var], color = "black", outlier.shape = 16) +
+    #     labs(x = NULL, y = NULL, title = var) +
+    #     theme_minimal() +
+    #     theme(axis.text.x = element_blank(),  # Remove x-axis labels for individual plots
+    #           axis.title.x = element_blank(),
+    #           axis.text.y = element_text(size = 10),  # Adjust size of y-axis labels
+    #           axis.title.y = element_text(size = 12)) +
+    #     scale_color_manual(values = colors)   +    # Use colors as specified
+    #     guides(color = "none")  # Remove the color legend
+    #   # Add the plot to the list
+    #   plot_list[[var]] <- plot_obj
+    # }
+    # 
+    # # Arrange all the plots in a grid
+    # all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
+    #                           top = Sp)
+    # # Save the grid to a PNG file
+    # ggsave(paste0("output/Filt_occurences_ggplot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    # 
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
 }
-  #################### 3. Pseudo absence generation
-    
+  
+
+#################### 3. Pseudo absence generation of one species
+
     number.PA <- nrow(Fin_occ_var)
     runs.PA <-5
     
+    # presence + Envirnomental variables
+    sp.xy <- data.frame(
+      Observed = 1, # Non-duplicated species occurrences
+      var.occ_3[,-1])
+    
     pseudoabs.biomod.table <- matrix(FALSE,
-                                   nrow = nrow(Fin_occ_var) + runs.PA * number.PA,
-                                   ncol = runs.PA) # creation table vide qui contient 5 pre run de pseudo-absence : meme nmbre pseudo-absence que de presence
-  colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA)
-  pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE ## = presence
-  
-  # presence + Envirnomental variables
-  cursp.rundata <- data.frame(
-    Observed = 1, # Non-duplicated species occurrences
-    var.occ_4[,-1])
-  
-  # Occurences coordinates
-  coord <- Occu_5[, c("x", "y")] 
-  
-  plot = F
-  for(PA in 1:runs.PA){
-    try({
+                                     nrow = nrow(Fin_occ_var) + number.PA,
+                                     ncol = runs.PA) # creation table vide qui contient 5 pre run de pseudo-absence : meme nmbre pseudo-absence que de presence
+    colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA)
+    
+    # Occurences coordinates
+    coord <- Occu_4[, c("x", "y")] 
+    
+    for(PA in 1:runs.PA){
       
       # Sampling pseudo-absences outside the convex hull
-      pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
+      cursp.pseudoabs <- sample(which(!cursp.inhull), # ;  & !presencepixels
                                 size = number.PA,
                                 replace = FALSE) 
-      
+      pseudoabscoord <- data.frame(envir.space$coords[cursp.pseudoabs,])
+
+      pseudoabs.biomod.table[, PA] <- TRUE ##
+    
       #Combine environmental of observed and pseudoabscence data
-      cursp.rundata <- rbind.data.frame(cursp.rundata,
-                                        data.frame(Observed = NA,
-                                                   envir.space$unique.conditions.in.env[pseudoabs, ])) # Bind environmental data of observed and randomly selected.
+      cursp.xy <- rbind.data.frame(sp.xy,
+                                   data.frame(Observed = NA,
+                                              envir.space$unique.conditions.in.env[cursp.pseudoabs, ])) # Bind environmental data of observed and randomly selected.
       
       #Combine environmental of observed and pseudoabscence coordinates
-      coord <- rbind(coord,
-                        data.frame(xyFromCell(Rastack[[1]],pseudoabs))) ## Get coordinates of NA + thoose of observed values
+      curcoordsp <- rbind(coord,
+                     data.frame(xyFromCell(Rastack[[1]],cursp.pseudoabs))) ## Get coordinates of NA + thoose of observed values
+
+      # # Plot the base raster map
+      plot(Rastack[[1]])
+      # # Plot points from 'test' on the map
+      points(convhull_coord_values$x, convhull_coord_values$y, pch = 20, col = "blue", cex = 0.2) ## convex_hull 
+      points(pseudoabscoord$x, pseudoabscoord$y, pch = 20, col = "black", cex = 0.7) ## Pseudoabsences + presence
+      points(coord$x, coord$y, pch = 20, col = "red", cex = 0.7) ## Occurences 
+      # Add a legend to distinguish the point sets
+      legend("bottomleft", legend = c("Convex hull", "Pseudoabsence", "Occurences"), col = c("blue", "black", "red"), pch = 10, pt.cex = 0.5)
+
       
-      #Create a dataframe which contains nrow(Fin_occ_var) +  number.PA*nrow(Fin_occ_var)
-      # Write down TRUE in corresponding PA estimation: 
-      # if PA = 1, TRUE values will be from 0:2*nrow(Fin_occ_var)
-      # if PA = 2, TRUE values will be from 0:nrow(Fin_occ_var) and after nrow(Fin_occ_var) (Space of nrow(Fin_occ_var) from PA = 1) during nrow(Fin_occ_var)
-      pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
-                               (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
-    })
+      curocc.obs <- cursp.xy[,"Observed"]
+      curenv <- cursp.xy[,-1]
+      
+      # Chemin de sauvegarde
+      save_dir <- paste0("models/", Sp)
+      
+      # Formatage des données pour BIOMOD2
+      run_data <- BIOMOD_FormatingData(
+        resp.name = Sp, 
+        resp.var = curocc.obs, 
+        expl.var = Rastack,   # Variables prédictives (rasterstack propre à l'espèce)
+        dir.name = save_dir,  # Dossier de stockage des modèles
+        resp.xy = curcoordsp,     # Coordonnées xy des présences et pseudo-absences
+        PA.strategy = 'user.defined',
+        PA.user.table = pseudoabs.biomod.table)
+      
+      saveRDS(run_data, file = paste0("models/", Sp, "/run_data.RDS"))
+    }
+      run_data # list
+      str(run_data, max.level = 3) # str : voir la structure de l'objet : max.level = a quelle profondeur il va regarder la liste
     
-     if(plot){
-       plotconvexhull(allenvpixels = as.data.frame(envir.space$unique.conditions.in.env),
-                      cursppixels = cur.sp.pixels.filt,
-                      pseudoabs = pseudoabs,
-                      curspinhull = cursp.inhull)
-     }
-    
-    results <- list(occurrence.environment.matrix = rundata,
-                    pseudoabs.biomod.table = pseudoabs.biomod.table, # pour chaque set pseudo abs : occurences + le set de pseudo abs
-                    xy.coordinates = coord) ## creation liste avec coordonnées des occurences + pseudo abs (5 car 5 echantillonages) 
-    
-    coorxy <- results$xy.coordinates
-    occurrences <- results$occurrence.environment.matrix
-    PATable <- results$pseudoabs.biomod.table
-    
-    # Chemin de sauvegarde
-    save_dir <- paste0("models/", Sp)
-    
-    # Formatage des données pour BIOMOD2
-    run_data <- BIOMOD_FormatingData(
-      resp.name = Sp, 
-      resp.var = occurrences$Observed, 
-      expl.var = Rastack,   # Variables prédictives (rasterstack propre à l'espèce)
-      dir.name = save_dir,  # Dossier de stockage des modèles
-      resp.xy = coorxy,     # Coordonnées xy des présences et pseudo-absences
-      PA.strategy = 'user.defined',
-      PA.user.table = filtered.records$pseudoabs.biomod.table
-    )
-    
-    
-    ##############################################################################
     ##############################################################################
     
     table_cv <- bm_CrossValidation(
@@ -469,8 +475,6 @@ for (i in 1:length(Vect_Sp)) {
       k = 5,
       nb.rep = 1,
       balance = "both") ### aleatoire --> Changer en geographique ? Environmental ?
-    
-    saveRDS(run_data, file = paste0(save_dir,Sp))
     
     calib_summary <-
       summary(run_data, calib.lines =  table_cv) %>%
