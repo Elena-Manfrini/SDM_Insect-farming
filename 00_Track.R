@@ -11,6 +11,7 @@ dir.create("data/Filtered_occurences")
 
 # model per species
 dir.create("models")
+dir.create("models/preparation")
 
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$x
@@ -22,4 +23,4 @@ for (i in 1:length(Vect_Sp)) {
 
 #For figures
 dir.create("output")
-dir.create("output/Filt_occurences_ggplot")
+dir.create("output/Filt_occurrences_plot")
