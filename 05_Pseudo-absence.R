@@ -1,0 +1,89 @@
+library(terra)
+library(openxlsx)
+library(sf)
+library(virtualspecies)
+library(sp)
+library(geodata)
+library(ggplot2)
+library(reshape2) 
+library(gridExtra)
+library(biomod2)
+library(maps)
+library(tidyterra)
+library(ggtext)
+
+# Load Environmental Space
+envir.space <- readRDS("data/raw/bioclim/baseline/Environmental_Space.rds")
+
+# Load environmental raster stack
+Rastack <- rast("data/raw/bioclim/baseline/final_baseline.tif")
+
+# Species name
+Species <- read.xlsx("data/Species_names.xlsx")
+Vect_Sp <- Species$x
+
+# Loop over each species to process occurrence data
+for (i in 1:length(Vect_Sp)) {
+  Sp <- Vect_Sp[[i]] # Current species name
+  
+  # Coordinates & Environemental values of species
+  Fin_occ_var <- read.xlsx(paste0("data/Filtered_occurences/Occ&Var_", Sp, ".xlsx"))
+  
+  # ConvexHull
+  cursp.inhull <- readRDS(paste0("data/ConvexHull/", Sp, "/cursp.inhull.rds"))
+  # Occurences inside ConvexHull
+  presencepixels <- readRDS(paste0("data/ConvexHull/", Sp, "/presencepixels.rds"))
+  
+  number.PA <- nrow(Fin_occ_var) # Number of pseudo absences
+  runs.PA <-5 # Number of pseudo absence run
+  
+  cursp.rundata <- Fin_occ_var[,-c(1:2)] # Environmental conditions
+  
+  pseudoabs.biomod.table <- matrix(FALSE,
+                                   nrow = nrow(Fin_occ_var) + runs.PA * number.PA,,
+                                   ncol = runs.PA) # creation table vide qui contient 5 pre run de pseudo-absence : meme nmbre pseudo-absence que de presence
+  colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA)
+  pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE
+  
+  # Occurrences coordinates
+  cursp.xy <- Fin_occ_var[, c("x", "y")] 
+  
+  for(PA in 1:runs.PA){
+    
+    # Sampling pseudo-absences outside the convex hull
+    cursp.pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
+                              size = number.PA,
+                              replace = FALSE) 
+    
+    cursp.rundata <- rbind.data.frame(cursp.rundata,
+                                      data.frame(Observed = NA,
+                                                 envir.space$unique.conditions.in.env[cursp.pseudoabs, ]))
+    
+    cursp.xy <- rbind(cursp.xy,
+                      data.frame(xyFromCell(Rastack[[1]],cursp.pseudoabs)))
+    
+    pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
+                             (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
+   }
+  
+  # coorxy <- cursp.xy
+  # occurrences  <- cursp.rundata
+  # PATable <- pseudoabs.biomod.table
+  # # curocc.obs <- cursp.xy[,"Observed"] # Observed vaues : 1 & NA
+  # # curenv <- cursp.xy[,-1] # Environmental variables
+  # 
+  # Chemin de sauvegarde
+  save_dir <- paste0("models/", Sp)
+  
+  # Formatage des données pour BIOMOD2
+  run_data <- BIOMOD_FormatingData(
+    resp.name = Sp, 
+    resp.var = cursp.rundata$Observed, 
+    expl.var = Rastack,   # Variables prédictives (rasterstack propre à l'espèce)
+    dir.name = save_dir,  # Dossier de stockage des modèles
+    resp.xy = cursp.xy,     # Coordonnées xy des présences et pseudo-absences
+    PA.strategy = 'user.defined',
+    PA.user.table = pseudoabs.biomod.table)
+  
+  saveRDS(run_data, file = paste0("models/", Sp, "/run_data.RDS"))
+}
