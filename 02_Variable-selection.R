@@ -6,7 +6,7 @@ library(sp)
 library(geodata)
 library(openxlsx)
 library(rnaturalearth)
-library(rnaturalearthhires)
+# library(rnaturalearthhires)
 library(rnaturalearthdata)
 library(ggplot2)
 library(ggcorrplot) # for the correlation matrix
@@ -32,7 +32,8 @@ for (i in 1:length(Vect_Vars)) {
 
 # Ensure that all variables are on the same extent --> This is not the case here.
 # Convert globalCropland_2010CE raster to same extent as CHELSA variables
-raster_list[["globalCropland_2010CE"]] <- crop(raster_list[["globalCropland_2010CE"]], ext(raster_list[["CHELSA_npp"]]))
+raster_list[["globalCropland_2010CE"]] <- resample(raster_list[["globalCropland_2010CE"]], 
+                                                   raster_list[["CHELSA_npp"]])
 
 # stack rasters
 Rastack <- rast(raster_list) # transform raster list into stack
@@ -44,9 +45,13 @@ Rastack <- rast(raster_list) # transform raster list into stack
 # download_land <- download.file(land_adresse, destfile = "data/raw/bioclim/land/land.zip")
 # land_folder <- "data/raw/bioclim/land/land.zip"
 # unzip(land_folder, exdir = "data/raw/bioclim/land")
+ne_download(scale = 10,
+            type = "land",
+            category = "physical",
+            destdir = "data/raw")
               
 # Read the shapefile
-land <- vect("data/raw/bioclim/land/ne_10m_land.shp")
+land <- vect("data/raw/ne_10m_land.shp")
 
 ## Rastack with values only for land
 Rastack <- mask(Rastack,land)
@@ -56,14 +61,14 @@ writeRaster(Rastack, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE
 
 ############# 2. Check collineratity
 # Load Raster
-Rastack <- rast("data/raw/bioclim/baseline/baseline.tif")
+Rastack <- rast("data/raw/bioclim/baseline.tif")
 
 ### 2.1 Correlation tree
 #Create a PNG to store the output image of the collinearity tree
 png("./output/collinearity_groups.png")
 
 # Remove highly collinear variables by grouping them using a correlation threshold
-groups <- removeCollinearity(raster::stack(Rastack), plot = T,
+groups <- removeCollinearity(Rastack, plot = T,
                              # This tests for collinearity and groups variables that are inter-collinear
                              multicollinearity.cutoff = 0.7, # Cutoff threshold
                              # sample.points = TRUE,
@@ -92,4 +97,4 @@ dev.off()
 Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2010CE")]]
 
 ## Save the final definitive raster
-writeRaster(Rastack_fin, filename = "data/raw/bioclim/baseline/final_baseline.tif", overwrite = TRUE)
+writeRaster(Rastack_fin, filename = "data/final_baseline.tif", overwrite = TRUE)

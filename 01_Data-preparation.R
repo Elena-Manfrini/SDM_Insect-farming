@@ -65,12 +65,39 @@ Species.df <- as.data.frame(Species)
 xlsx::write.xlsx(Species, "data/Species_names.xlsx",
                  row.names = FALSE)
 
+
+log_file <- "data/raw/occurences/completion_log.txt"
+output_dir <- "data/raw/occurences"
+
+
+# Load completed species from the log file
+completed_species <- if (file.exists(log_file)) {
+  readLines(log_file)
+} else {
+  character()  # Initialize as empty if log file doesn't exist
+}
+
+
 for (i in 1:length(Species)){
   sp <- Species[i] # Current species
   
+  # Check if the species is already processed
+  if (sp %in% completed_species) {
+    message(sprintf("Skipping %s: already completed.", sp))
+    next
+  }
+  
+  # Progress message
+  message(sprintf("Processing %s (%d/%d)...", sp, i, length(Species)))
+  
+  
   # Download species occurrences from GBIF
-  occurrence <- occ_search(scientificName = sp, basisOfRecord = c("HUMAN_OBSERVATION","MACHINE_OBSERVATION"),
-                           year = '1980,2024', limit = 300000, fields= "minimal")
+  occurrence <- occ_search(scientificName = sp,
+                           basisOfRecord = c("HUMAN_OBSERVATION",
+                                             "MACHINE_OBSERVATION"),
+                           year = '1980,2024', 
+                           limit = 300000,
+                           fields= "minimal")
   # Create a dataframe for species occurrences (latitude and longitude)
   Occu <- data.frame(
     x = c(occurrence$HUMAN_OBSERVATION$data$decimalLongitude, 
@@ -79,6 +106,13 @@ for (i in 1:length(Species)){
           occurrence$MACHINE_OBSERVATION$data$decimalLatitude)
   ) %>% na.omit() # Remove rows with missing values (NA)
   #nrow(Occu) # Number of occurrences
+
   # Save occurrences to an Excel file
-  xlsx::write.xlsx(Occu, paste0("data/raw/occurences/Occurences_", sp, ".xlsx"), row.names = F)
+  output_file <- file.path(output_dir, paste0("Occurences_", sp, ".xlsx"))
+  xlsx::write.xlsx(Occu, output_file, row.names = FALSE)
+  
+  # Append the species to the completion log
+  write(sp, file = log_file, append = TRUE)
+  
+  message(sprintf("Completed %s.", sp))
 }
