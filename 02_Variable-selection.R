@@ -96,5 +96,9 @@ dev.off()
 # Stack the definitive environmental variables into a single raster object
 Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2010CE")]]
 
+names(Rastack_fin) <- gsub("CHELSA_", 
+                           "",
+                           names(Rastack))
+
 ## Save the final definitive raster
 writeRaster(Rastack_fin, filename = "data/final_baseline.tif", overwrite = TRUE)

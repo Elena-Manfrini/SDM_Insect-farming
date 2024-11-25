@@ -1,17 +1,17 @@
 library(terra)
-library(sf)
-library(Rarity) # plot des correlations multiples
-library(virtualspecies)
-library(sp)
-library(geodata)
+# library(sf)
+# library(Rarity) # plot des correlations multiples
+# library(virtualspecies)
+# library(sp)
+# library(geodata)
 library(openxlsx)
 library(ggplot2)
-library(reshape2) 
+# library(reshape2) 
 library(gridExtra)
 library(biomod2)
-library(maps)
-library(tidyterra)
-library(ggtext)
+# library(maps)
+# library(tidyterra)
+# library(ggtext)
 
 ###################### Define computeEnvCombinations function ######################
 computeEnvCombinations <- function(env.stack,
@@ -56,7 +56,8 @@ computeEnvCombinations <- function(env.stack,
   # Optional 3D plot of the selected environmental variables
   if(plot)
   {
-    plot3d(all.env.pixels[, vars.to.plot])
+    require(rgl)
+    rgl::plot3d(all.env.pixels[, vars.to.plot])
   }
   # Return a list containing detailed intervals, unique conditions, and coordinates
   return(list(detailed.intervals = possible.combs,
@@ -77,95 +78,100 @@ midpoints <- function(x) {
 
 ############# 1. Environmental Space
 # Load environmental raster stack
-Rastack <- rast("data/raw/bioclim/baseline/final_baseline.tif")
+Rastack <- rast("data/final_baseline.tif")
 
 # Get values from the raster stack, including NA for missing values (e.g., ocean areas)
 values <- values(Rastack) 
 combinations <- as.data.frame(values)
 combinations <- combinations[complete.cases(combinations), ] # Remove rows with NA
 
+
+step <- 0.02
+
 # Calculate quantiles for each environmental variable to set up intervals
 # Each variable's values are split into 100 equal parts (for 100 quantile intervals)
-Bio5 <- quantile(combinations[,1], probs=seq(0,1,0.01))
-plot(Bio5)
-Bio7 <- quantile(combinations[,2], probs=seq(0,1,0.01))
-Hurs_min <- quantile(combinations[,3], probs=seq(0,1,0.01))
-Hurs_range <- quantile(combinations[,4], probs=seq(0,1,0.01))
-Npp <- quantile(combinations[,5], probs=seq(0,1,0.01))
-croplands <- quantile(combinations[,6], probs=seq(0,1,0.01))
-plot(Npp)
+bio5 <- quantile(combinations[,1], probs=seq(0,1,step))
+# plot(bio5)
+bio7 <- quantile(combinations[,2], probs=seq(0,1,step))
+hurs_min <- quantile(combinations[,3], probs=seq(0,1,step))
+hurs_range <- quantile(combinations[,4], probs=seq(0,1,step))
+npp <- quantile(combinations[,5], probs=seq(0,1,step))
+croplands <- quantile(combinations[,6], probs=seq(0,1,step))
+# plot(Npp)
 
 # Create a list of unique intervals for each variable (6-dimensional environmental grid)
 intervals <- list(
-  Bio5 = sort(unique(as.numeric(Bio5))),
-  Bio7 = sort(unique(as.numeric(Bio7))),
-  Hurs_min = sort(unique(as.numeric(Hurs_min))),
-  Hurs_range = sort(unique(as.numeric(Hurs_range))),
-  Npp = sort(unique(as.numeric(Npp))),
+  bio5 = sort(unique(as.numeric(bio5))),
+  bio7 = sort(unique(as.numeric(bio7))),
+  hurs_min = sort(unique(as.numeric(hurs_min))),
+  hurs_range = sort(unique(as.numeric(hurs_range))),
+  npp = sort(unique(as.numeric(npp))),
   croplands = sort(unique(as.numeric(croplands)))
 )
 
-saveRDS(intervals, file = "data/raw/bioclim/baseline/intervals.rds")
 
 # Assign names to intervals based on raster stack variable names
 names(intervals) <- names(Rastack)
+saveRDS(intervals, file = "data/intervals.rds")
 
 # Calculate environmental combinations to create an environmental space
 envir.space <- computeEnvCombinations(
-  env.stack = Rastack[[c(names(Rastack))]],
+  env.stack = Rastack,
   var.intervals = intervals, 
-  plot = F,
+  plot = T,
   vars.to.plot = 1:5) 
 
-saveRDS(envir.space, file = "data/raw/bioclim/baseline/Environmental_Space.rds")
+saveRDS(envir.space, file = "data/Environmental_Space.rds")
 
 ############# 2. Occurrences filtering
-
-envir.space <- readRDS("data/raw/bioclim/baseline/Environmental_Space.rds")
-intervals <- readRDS("data/raw/bioclim/baseline/intervals.rds")
+Rastack <- rast("data/final_baseline.tif")
+envir.space <- readRDS("data/Environmental_Space.rds")
+intervals <- readRDS("data/intervals.rds")
 
 # Species name
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$x
 
 # Change baseline Spat raster as raster
-baseline_raster <- as(Rastack, "Raster")
+# baseline_raster <- as(Rastack, "Raster")
+baseline_raster <- Rastack
 
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   Occu <- read.xlsx(paste0("data/raw/occurences/Occurences_", Sp, ".xlsx")) # Load occurrences for this species
-  
+
   ### 2.1 Remove occurrences outside land
   
   # Proceed only if there are more than 10 occurrences per environmental variable
-  if (length(Occu$x) > 60){
+  # if (length(Occu$x) > 60){
     # Rasterize occurrences to align with baseline raster
-    Occu_2 <- rasterize(Occu[,1:2],baseline_raster)
-    Occu_2 <- as.data.frame(Occu_2, xy=T) # Convert to data frame with coordinates
-    
+    Occu_r <- rasterize(as.matrix(Occu[,1:2]), baseline_raster)
+    Occu_r <- as.data.frame(Occu_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
+
     # Combine occurrences with the baseline raster values
-    Rastab <- as.data.frame(baseline_raster[[1]],xy=T) # Take one layer of baseline raster
-    Occu_2 <- cbind(Occu_2,Rastab[[3]]) # Add variable values
-    Occu_2 <- Occu_2[complete.cases(Occu_2[ , c(colnames(Occu_2))]), ] # Remove occurrences outside land
-    Occu_2 <- Occu_2[,-c(4)] 
-    Occu_2$layer <- rep(1,length(Occu_2$x)) # Assign presence = 1 for each occurrence
-    colnames(Occu_2) <- c("x","y","Observed") # Rename columns
-  }
+    Rastab <- as.data.frame(baseline_raster[[1]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
+    Occu_r <- cbind(Occu_r,Rastab[[3]]) # Add variable values
+    Occu_r <- Occu_r[complete.cases(Occu_r), ] # Remove occurrences outside land
+    Occu_r <- Occu_r[, -4]
+    Occu_r[3] <- 1 # Assign presence = 1 for each occurrence
+    colnames(Occu_r) <- c("x","y","Observed") # Rename columns
+  # }
   
-   var.intervals <- intervals # Environmental intervals for categorizing occurrence data
+   # var.intervals <- intervals # Environmental intervals for categorizing occurrence data
   
   ### 2.2 Remove duplicated occurrences in Environmental Space
   
   # Extract environmental values at occurrence locations
-  var.occ <- terra::extract(Rastack, Occu_2[, c("x", "y")])
+  var.occ <- terra::extract(Rastack, Occu_r[, c("x", "y")])
+  var.occ <- var.occ[complete.cases(var.occ), ]
   
   # Map occurrences to environmental intervals based on initial variable ranges
   # In which grid cells do the occurrences fall based on the initial intervals provided?
   # Where do the occurrences position themselves within the defined environmental space?
   env.itvl <- sapply(colnames(var.occ[,-1]), function(x, combs, seqs.)
     cut(combs[, x], breaks = seqs.[[x]], include.lowest = TRUE, right = FALSE),
-    combs = var.occ[,-1], seqs. = var.intervals)
+    combs = var.occ[,-1], seqs. = intervals)
   
   duplicated.cells.itv <- which(duplicated(env.itvl)) # Identify duplicated environmental conditions
   
@@ -176,26 +182,28 @@ for (i in 1:length(Vect_Sp)) {
           length(duplicated.cells.itv),
           "\nNumber of unique occurrences (environmental space): ",
           nrow(env.itvl[-duplicated.cells.itv, ]),
-          "\n\nTotal number of presences: ",
-          length(which(Occu_2$Observed == 1)),
+          "\n\nTotal number of presences (raw): ",
+          nrow(Occu),
+          "\n\nTotal number of presences (rasterized): ",
+          length(which(Occu_r$Observed == 1)),
           "\nNumber of duplicated presences: ", 
-          length(which(Occu_2$Observed[duplicated.cells.itv] == 1)),
+          length(which(Occu_r$Observed[duplicated.cells.itv] == 1)),
           "\nNumber of unique presences: ",
-          length(which(Occu_2$Observed[-duplicated.cells.itv] == 1)),
+          length(which(Occu_r$Observed[-duplicated.cells.itv] == 1)),
           "\n\nTotal number of absences: ",
-          length(which(Occu_2$Observed == 0)),
+          length(which(Occu_r$Observed == 0)),
           "\nNumber of duplicated absences: ", 
-          length(which(Occu_2$Observed[duplicated.cells.itv] == 0)),
+          length(which(Occu_r$Observed[duplicated.cells.itv] == 0)),
           "\nNumber of unique absences: ",
-          length(which(Occu_2$Observed[-duplicated.cells.itv] == 0)))
+          length(which(Occu_r$Observed[-duplicated.cells.itv] == 0)))
   
   # Filter out duplicated occurrences if any
-  if(length(duplicated.cells.itv)>0){
-    Occu_3 <- Occu_2[-duplicated.cells.itv, ] ## Remove duplicated occurrences
+  if(length(duplicated.cells.itv) > 0){
+    Occu_3 <- Occu_r[-duplicated.cells.itv, ] ## Remove duplicated occurrences
     env.itvl_2 <- env.itvl[-duplicated.cells.itv, ] ## new environmental interval without duplicated ones
     var.occ_2 <- var.occ[-duplicated.cells.itv, ]
-  }else{
-    Occu_3 <- Occu_2
+  } else {
+    Occu_3 <- Occu_r
     env.itvl_2 <- env.itvl
     var.occ_2 <- var.occ
   } 
@@ -243,18 +251,23 @@ for (i in 1:length(Vect_Sp)) {
   # convhull_coord_values <- as.data.frame(convhull_coord_values)
   # points(convhull_coord_values$x, convhull_coord_values$y, pch = 20, col = "blue", cex = 0.2) ## convex_hull
   
-  presencepixels <- apply(envir.space$unique.conditions.in.env, 1,paste, collapse = " ")   %in% 
+  # La ligne suivante permet de savoir quels pixels de l'espace vnrionnemental
+  # correspondent à des présences (hors outliers) de notre espèce
+  presencepixels <- apply(envir.space$unique.conditions.in.env, 1, paste, collapse = " ")   %in% 
     ## For each row, the env values are concatenated into a single string with spaces between them.
     #check if elements of one vector are present in another. 
-    apply(cur.sp.pixels.filt, 1, paste, collapse = " ")
+    apply(cur.sp.pixels, 1, paste, collapse = " ")
   #It returns a logical vector (TRUE or FALSE), indicating whether each element in the first vector is found in the second vector
   
   # Final dataframe of occurences and their respective variable values
     Fin_occ_var <- cbind(Occu_3, var.occ_2)
     Fin_occ_var <- Fin_occ_var %>%
-    dplyr::select(-ID)
+      dplyr::select(-ID)
 
     # Save occurrences to an Excel file
+    if(!dir.exists("data/Filtered_occurences")) {
+      dir.create("data/Filtered_occurences,")
+    }
     xlsx::write.xlsx(Fin_occ_var, paste0("data/Filtered_occurences/Occ&Var_", Sp, ".xlsx"), row.names = F)
     
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
@@ -267,7 +280,7 @@ for (i in 1:length(Vect_Sp)) {
     # png(paste0("output/Filt_occurrences_plot/Occurence_plot_", Sp, ".png"), width = 800, height = 600)  # Adjust dimensions as needed
     # 
     # plot(Rastack[[1]])
-    # points(Occu_2[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
+    # points(Occu_r[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
     # points(Occu_3[ , c("x", "y")], pch = 20, cex = 0.5, col = "#F44336")
     # # Add a title
     # title(main = paste0("Final occurrence of ", Sp))
@@ -299,25 +312,25 @@ for (i in 1:length(Vect_Sp)) {
     
     ggplot() +
     #   # Add a rectangle for the extent of the env_space dataframe
-       geom_rect(aes(xmin = min(env_space$CHELSA_bio5), xmax = max(env_space$CHELSA_bio5), 
-                     ymin = min(env_space$CHELSA_bio7), ymax = max(env_space$CHELSA_bio7)),
+       geom_rect(aes(xmin = min(env_space$bio5), xmax = max(env_space$bio5), 
+                     ymin = min(env_space$bio7), ymax = max(env_space$bio7)),
                  fill = "green", alpha = 0.5) +
        # Add a rectangle for the extent of the Convex_hull dataframe
-       geom_rect(aes(xmin = min(var.occ_convhull$CHELSA_bio5), xmax = max(var.occ_convhull$CHELSA_bio5), 
-                     ymin = min(var.occ_convhull$CHELSA_bio7), ymax = max(var.occ_convhull$CHELSA_bio7)),
+       geom_rect(aes(xmin = min(var.occ_convhull$bio5), xmax = max(var.occ_convhull$bio5), 
+                     ymin = min(var.occ_convhull$bio7), ymax = max(var.occ_convhull$bio7)),
                  fill = "blue") +
        # Plot the points for occurences as black dots
-       geom_point(data = var.occ_2, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "black", size = 0.5) +
+       geom_point(data = var.occ_2, aes(x = bio5, y = bio7), color = "black", size = 0.5) +
        # Plot points for the Convex_hull dataframe
-       geom_point(data = var.occ_convhull, aes(x = CHELSA_bio5, y = CHELSA_bio7), color = "red",size = 0.5) +
+       geom_point(data = var.occ_convhull, aes(x = bio5, y = bio7), color = "red",size = 0.5) +
     #   # Customize plot limits for better visualization
-       xlim(min(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) - 1, 
-            max(c(env_space$CHELSA_bio5, env_space$CHELSA_bio5)) + 1) +
-       ylim(min(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) - 1, 
-            max(c(env_space$CHELSA_bio7, env_space$CHELSA_bio7)) + 1) +
+       xlim(min(c(env_space$bio5, env_space$bio5)) - 1, 
+            max(c(env_space$bio5, env_space$bio5)) + 1) +
+       ylim(min(c(env_space$bio7, env_space$bio7)) - 1, 
+            max(c(env_space$bio7, env_space$bio7)) + 1) +
     #   # Add labels and title
        labs(title = "Extent Comparison Between env_space and Convex_hull",
-            x = "CHELSA_bio5", y = "CHELSA_bio7") +
+            x = "bio5", y = "bio7") +
        theme_minimal()
     # 
     ## 4.2 Environmental range
@@ -329,11 +342,11 @@ for (i in 1:length(Vect_Sp)) {
     # Create a list to store each ggplot
      plot_list <- list()
     # Define a list of colors for each variable
-     colors <- c("CHELSA_bio5" = "brown1",   # Blue
-                 "CHELSA_bio7" = "brown",   # Orange
-                 "CHELSA_hurs_min" = "#2BDBCA", # Green
-                 "CHELSA_hurs_range" = "#488680", # Red
-                 "CHELSA_npp" = "green4",     # Purple
+     colors <- c("bio5" = "brown1",   # Blue
+                 "bio7" = "brown",   # Orange
+                 "hurs_min" = "#2BDBCA", # Green
+                 "hurs_range" = "#488680", # Red
+                 "npp" = "green4",     # Purple
                  "globalCropland_2010CE" = "#DB792C")  # Brown
     # 
     # Loop over each environmental variable and create a boxplot for each
@@ -383,12 +396,14 @@ for (i in 1:length(Vect_Sp)) {
                                 size = number.PA,
                                 replace = FALSE) 
       
-      cursp.rundata <- rbind.data.frame(cursp.rundata,
-                                        data.frame(Observed = NA,
-                                                   envir.space$unique.conditions.in.env[cursp.pseudoabs, ]))
+      cursp.rundata <- rbind.data.frame(
+        cursp.rundata,
+        data.frame(Observed = NA,
+                   envir.space$unique.conditions.in.env[cursp.pseudoabs, ]))
       
       cursp.xy <- rbind(cursp.xy,
-                        data.frame(xyFromCell(Rastack[[1]],cursp.pseudoabs)))
+                        data.frame(xyFromCell(Rastack[[1]], 
+                                              cursp.pseudoabs)))
       
       pseudoabs.biomod.table[(nrow(cur.sp.pixels) + 1 + (PA - 1) * number.PA):
                                (nrow(cur.sp.pixels) + PA * number.PA), PA] <- TRUE
@@ -444,11 +459,15 @@ for (i in 1:length(Vect_Sp)) {
       # Chemin de sauvegarde
       save_dir <- paste0("models/", Sp)
       
+      if(!dir.exists(save_dir)) {
+        dir.create(save_dir)
+      }
+      
       # Formatage des données pour BIOMOD2
       run_data <- BIOMOD_FormatingData(
         resp.name = Sp, 
         resp.var = occurrences$Observed, 
-        expl.var = Rastack,   # Variables prédictives (rasterstack propre à l'espèce)
+        expl.var = occurrences[, -1],   # Variables prédictives (rasterstack propre à l'espèce)
         dir.name = save_dir,  # Dossier de stockage des modèles
         resp.xy = coorxy,     # Coordonnées xy des présences et pseudo-absences
         PA.strategy = 'user.defined',
