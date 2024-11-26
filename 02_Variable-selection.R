@@ -98,7 +98,7 @@ Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_
 
 names(Rastack_fin) <- gsub("CHELSA_", 
                            "",
-                           names(Rastack))
+                           names(Rastack_fin))
 
 ## Save the final definitive raster
 writeRaster(Rastack_fin, filename = "data/final_baseline.tif", overwrite = TRUE)

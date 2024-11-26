@@ -24,7 +24,7 @@ vars$vars <- paste0("CHELSA_", vars$vars) # Prefix variables with "CHELSA_"
 
 # 1.1.2  Download CHELSA data
 
-for(i in 1:nrow(vars)) {
+for(i in 16:nrow(vars)) {
   bioclim <- vars[i,]
   bioclim_fin <- gsub("CHELSA_", "", bioclim)
     addresse <- paste0(
@@ -56,13 +56,13 @@ xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an E
 
 ############# 3. Species occurrences download (from GBIF)
 
-Species <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
+Vect_Sp <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
              "Alphitobius diaperinus", "Musca domestica", 
              "Gryllodes sigillatus", "Locusta migratoria", "Gryllus assimilis")
 
-Species.df <- as.data.frame(Species)
+Vect_Sp.df <- as.data.frame(Vect_Sp)
 
-xlsx::write.xlsx(Species, "data/Species_names.xlsx",
+xlsx::write.xlsx(Vect_Sp.df, "data/Species_names.xlsx",
                  row.names = FALSE)
 
 
@@ -78,8 +78,8 @@ completed_species <- if (file.exists(log_file)) {
 }
 
 
-for (i in 1:length(Species)){
-  sp <- Species[i] # Current species
+for (i in 1:length(Vect_Sp)){
+  sp <- Vect_Sp[i] # Current species
   
   # Check if the species is already processed
   if (sp %in% completed_species) {
@@ -88,7 +88,7 @@ for (i in 1:length(Species)){
   }
   
   # Progress message
-  message(sprintf("Processing %s (%d/%d)...", sp, i, length(Species)))
+  message(sprintf("Processing %s (%d/%d)...", sp, i, length(Vect_Sp)))
   
   
   # Download species occurrences from GBIF

@@ -1,6 +1,5 @@
 ## Create all folder for clarity
 
-library(openxlsx)
 Vect_Sp <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
              "Alphitobius diaperinus", "Musca domestica", 
              "Gryllodes sigillatus", "Locusta migratoria", "Gryllus assimilis")
@@ -15,11 +14,11 @@ dir.create("data/raw/bioclim/baseline")
 dir.create("data/raw/bioclim/land")
 dir.create("data/raw/occurences")
 
-dir.create("data/Filtered_occurences")
+dir.create("data/filtered_occurences")
 
-dir.create("data/ConvexHull")
+dir.create("data/convexhull")
 for (i in Vect_Sp) {
-  dir.create(paste0("data/ConvexHull/", i))
+  dir.create(paste0("data/convexhull/", i))
 }
 
 # model per species
