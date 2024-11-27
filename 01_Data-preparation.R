@@ -24,15 +24,16 @@ vars$vars <- paste0("CHELSA_", vars$vars) # Prefix variables with "CHELSA_"
 
 # 1.1.2  Download CHELSA data
 
-for(i in 16:nrow(vars)) {
+for(i in 1:nrow(vars)) {
   bioclim <- vars[i,]
   bioclim_fin <- gsub("CHELSA_", "", bioclim)
     addresse <- paste0(
       "https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/climatologies/1981-2010/bio/CHELSA_",
       bioclim_fin, "_1981-2010_", "V.2.1.tif")
+    options(timeout=300)
   download.file(addresse,
                 destfile = paste0("data/raw/bioclim/", bioclim, ".tif"),
-                #method = "wget", 
+                MODE = "wb",
                 quiet = TRUE)
 }
 
