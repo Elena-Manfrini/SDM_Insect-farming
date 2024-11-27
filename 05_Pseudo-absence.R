@@ -16,65 +16,67 @@ Vect_Sp <- Species$Vect_Sp
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   
-  # Coordinates & Environemental values of species
+  # Occurrence and environmental values for the species
   Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
   
-  # ConvexHull
+  # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
-  # Occurences inside ConvexHull
   presencepixels <- readRDS(paste0("data/convexhull/", Sp, "_presencepixels.rds"))
   
-  number.PA <- nrow(Fin_occ_var)
-  runs.PA <-5
+  # Set the number of presence-absence (PA) points and the number of random runs for PA sampling
+  number.PA <- nrow(Fin_occ_var) # Number of presence points = Number of pseudo absence points
+  runs.PA <-5 # Number of random runs for pseudo-absence sampling
   
+  # Prepare environmental data for the species 
   cursp.rundata <- Fin_occ_var[,-c(1:2)] # Environmental conditions
   
+  # Table for storing the pseudo-absence data 
   pseudoabs.biomod.table <- matrix(FALSE,
                                    nrow = nrow(Fin_occ_var) + runs.PA * number.PA,,
-                                   ncol = runs.PA) # creation table vide qui contient 5 pre run de pseudo-absence : meme nmbre pseudo-absence que de presence
-  colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA)
-  pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE
+                                   ncol = runs.PA) 
+  colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA) # Column names for each PA run
+  pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE # Set the presence points to TRUE
   
-  # Occurrences coordinates
+  # XY coordinates of the species' presence points
   cursp.xy <- Fin_occ_var[, c("x", "y")] 
   
+  # Loop to sample pseudo-absence points for each run (outside the convex hull and presence pixels)
   for(PA in 1:runs.PA){
     
-    # Sampling pseudo-absences outside the convex hull
+    # # Sample pseudo-absence points outside the convex hull
     cursp.pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
-                              size = number.PA,
-                              replace = FALSE) 
+                              size = number.PA, # Same number as the presence points
+                              replace = FALSE) # No replacement, unique cells
     
+    # Pseudo-absence data to the environmental data (NA as values in the "Observed" column)
     cursp.rundata <- rbind.data.frame(
       cursp.rundata,
-      data.frame(Observed = NA,
-                 envir.space$unique.conditions.in.env[cursp.pseudoabs, ]))
+      data.frame(Observed = NA, # Observed is NA for pseudo-absence points
+                 envir.space$unique.conditions.in.env[cursp.pseudoabs, ])) # Environmental conditions for pseudo-absences
     
+    # Append the coordinates of pseudo-absence points to the coordinate data
     cursp.xy <- rbind(cursp.xy,
                       data.frame(xyFromCell(Rastack[[1]], 
                                             cursp.pseudoabs)))
     
+    # Update the pseudo-absence table for the current run (mark rows as TRUE for pseudo-absence points)
     pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
                              (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
   }
-
-  # curocc.obs <- cursp.xy[,"Observed"] # Observed vaues : 1 & NA
-  # curenv <- cursp.xy[,-1] # Environmental variables
   
-  # Chemin de sauvegarde
+  # Create the output directory for models if it doesn't exist
   save_dir <- paste0("models/", Sp)
-  
   if(!dir.exists(save_dir)) {
     dir.create(save_dir)
   }
   
-  # Formatage des données pour BIOMOD2
+  # BIOMOD2 formating data
   run_data <- BIOMOD_FormatingData(
     resp.name = Sp, 
-    resp.var = cursp.rundata$Observed, 
-    expl.var = cursp.rundata[, -1],   # Variables prédictives (rasterstack propre à l'espèce)
-    dir.name = save_dir,  # Dossier de stockage des modèles
-    resp.xy = cursp.xy,     # Coordonnées xy des présences et pseudo-absences
+    resp.var = cursp.rundata$Observed, # Observed data for the species (presence/absence values)
+    expl.var = cursp.rundata[, -1],   # Predictive variables (species-specific raster stack)
+    dir.name = save_dir,  # Directory for saving the models
+    resp.xy = cursp.xy,     # XY coordinates of the presence and pseudo-absence points
     PA.strategy = 'user.defined',
     PA.user.table = pseudoabs.biomod.table)
   

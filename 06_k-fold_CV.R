@@ -10,128 +10,136 @@ Vect_Sp <- Species$Vect_Sp
 
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
-  Sp <- Vect_Sp[[i]] # Current species name
+  Sp <- Vect_Sp[[i]] # Get the current species name
   
+  # Read model projection data for the species
   proj_names <- readRDS(paste0("models/", Sp, "/run_data.RDS"))
-  proj_names
-  ##############################################################################
   
+  ############# 1. K-fold crossvalidation
+  
+  # Perform K-fold cross-validation with 5 folds
   table_cv <- bm_CrossValidation(
-    bm.format = proj_names,
-    strategy = "kfold",
-    k = 5,
-    nb.rep = 1,
-    balance = "both") ### aleatoire --> Changer en geographique ? Environmental ?
+    bm.format = proj_names, # Model projections to validate
+    strategy = "kfold", # Cross-validation strategy
+    k = 5, # Number of folds for cross-validation
+    nb.rep = 1, # Number of repetitions
+    balance = "both") # Option to balance presence and absence data
   
+  # Extract the calibration summary from the cross-validation results
   calib_summary <-
     summary(proj_names, calib.lines =  table_cv) %>%
-    filter(dataset == "calibration") ## separation jeu de données en 5
+    filter(dataset == "calibration") # Filter calibration dataset for the cross-validation
   
+  ############# 2. Model formating
   
-  # iwp <- (10^6)^(1 - proj_names@data.env.var) ## parametre biomod
+  ### 2.1 Model preparation
   
+  # Create empty lists to store parameter configurations for different models
   RF_param_list <- NULL
   XGBOOST_param_list <- NULL
   MAXNET_param_list <- NULL
   
+  # Loop over each cross-validation run to adjust model parameters
   for (cvrun in 1:nrow(calib_summary)) {
-    prNum <- calib_summary$Presences[cvrun]
-    bgNum <- calib_summary$Pseudo_Absences[cvrun]
+    prNum <- calib_summary$Presences[cvrun] # Number of presence points
+    bgNum <- calib_summary$Pseudo_Absences[cvrun] # Number of pseudo abscence points
     
-    wt <- ifelse(proj_names@data.species == 1, 1, prNum / bgNum) #### toujours 1 : meme poids pour les pseudo abs que pour les presences
-
-  # Ajustement des paramètres pour Random Forest
+    # Random Forest model parameters
     RF_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-      ntree = 2000,  # Augmentation du nombre d'arbres
-      mtry = floor(sqrt(ncol(proj_names@data.env.var))),  # Ajustement de mtry pour capturer plus de variables
-      sampsize = c("0" = bgNum, "1" = bgNum),
+      ntree = 2000,  # Number of trees in the forest
+      mtry = floor(sqrt(ncol(proj_names@data.env.var))), # number of variables per tree
+      sampsize = c("0" = bgNum, "1" = bgNum), # Balanced sampling of presence and background
       replace = TRUE
     )
   
-    # Ajustement des paramètres pour XGBOOST
+    # XGBOOST model parameters
+    # Adjust weights for the XGBOOST model based on presence and background points
+    wt <- ifelse(proj_names@data.species == 1, 1, prNum / bgNum) #### toujours 1 : meme poids pour les pseudo abs que pour les presences
+    
   XGBOOST_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-    nrounds = 1000,  # Augmentation des itérations pour une meilleure convergence
-    eta = 0.05,  # Augmentation du taux d'apprentissage pour accélérer la convergence
-    max_depth = 7,  # Augmentation de la profondeur pour capturer plus d'interactions
-    subsample = 0.9,  # Utilisation d'une plus grande fraction des données
-    objective = "binary:logistic",
-    gamma = 1,  # Introduction de la complexité pour éviter le surapprentissage
-    colsample_bytree = 0.8,  # Augmentation de la fraction des caractéristiques à chaque arbre
-    min_child_weight = 1,
-    weight = wt,
+    nrounds = 1000,  # number of iterations
+    eta = 0.05,  # learning rate
+    max_depth = 7,  # depth of trees
+    subsample = 0.9,  # Use 90% of the data for each tree
+    objective = "binary:logistic", # Binary logistic regression
+    gamma = 1,  # Regularization to avoid overfitting
+    colsample_bytree = 0.8,  # Fraction of features to sample per tree
+    min_child_weight = 1, # Minimum sum of instance weight
+    weight = wt, # Use calculated weights for each data point
     verbose = 0
   )
   
-  # Ajustement des paramètres pour MAXNET
+  # MAXNET model parameters
   MAXNET_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-    l1_regularizer = 0.1,  # Ajout d'une légère régularisation L1
-    l2_regularizer = 0.1,  # Ajout d'une légère régularisation L2
-    use_sgd = TRUE,
-    set_heldout = 0,
+    l1_regularizer = 0.1,  # L1 regularization to prevent overfitting
+    l2_regularizer = 0.1,  # L2 regularization to prevent overfitting
+    use_sgd = TRUE, # Use stochastic gradient descent
+    set_heldout = 0, # No held-out data for validation
     verbose = TRUE
   )
-}
-
-Param_Models <- list(
-  RF.binary.randomForest.randomForest = RF_param_list,
-  XGBOOST.binary.xgboost.xgboost = XGBOOST_param_list,
-  MAXNET.binary.maxnet.maxnet = MAXNET_param_list
-)
-
-model_parameters <- bm_ModelingOptions(
-  data.type = "binary",
+  }
+  
+  # Define modeling options
+  model_parameters <- bm_ModelingOptions(
+  data.type = "binary", # Binary classification (presence/absence)
   models = c('RF', 'XGBOOST','MAXNET'),
   strategy = "user.defined",
   user.base = "default",
   user.val = list(
     RF.binary.randomForest.randomForest = RF_param_list,
     XGBOOST.binary.xgboost.xgboost = XGBOOST_param_list,
-    MAXNET.binary.maxnet.maxnet = MAXNET_param_list),
-  bm.format = proj_names,
-  calib.lines = table_cv) 
-
-
-# Modélisation
-myBiomodModelOut <- BIOMOD_Modeling(
+    MAXNET.binary.maxnet.maxnet = MAXNET_param_list), 
+  bm.format = proj_names, # Input model data
+  calib.lines = table_cv # Cross-validation table
+  ) 
+  
+  ### 2.2 Invividual models
+  
+  # Run modeling with specified parameters
+  myBiomodModelOut <- BIOMOD_Modeling(
   proj_names,
-  modeling.id = "1",
+  modeling.id = "Modeling",
   models = c('RF', 'XGBOOST','MAXNET'),
   OPT.strategy = "user.defined",
   OPT.user = model_parameters,
   CV.strategy = 'user.defined',
   CV.user.table = table_cv,
   CV.do.full.models = FALSE,
-  var.import = 10,
-  metric.eval = c('BOYCE'),
-  do.progress = TRUE
-)
-
-# Sauvegarder le résultat de la modélisation
-saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output.rds"))
-
-# Obtenir les évaluations des modèles
-evals <- get_evaluations(myBiomodModelOut)
-
-# Filtrer les modèles avec un indice de Boyce > 0.7
-Choosen_Model <- evals %>% filter(validation > 0.7)
-
-# Récupération des projections correspondantes
-selected_models <- Choosen_Model$full.name # Nom des modèles sélectionnés
-
-
-resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
+  var.import = 10, # Number of variable importance metrics to calculate
+  metric.eval = c('BOYCE'), # Evaluation metric (Boyce index)
+  do.progress = TRUE)
+  
+  # Save the modeling output
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output.rds"))
+  
+  
+  ## 2.2.a Reponse curves
+  
+  # Get the evaluation results for each model
+  evals <- get_evaluations(myBiomodModelOut)
+  
+  # Filter models with a Boyce index greater than 0.7
+  Choosen_Model <- evals %>% filter(validation > 0.7)
+  
+  # Extract the names of selected models
+  selected_models <- Choosen_Model$full.name # Get the full names of selected models
+  
+  # Save the selected models
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models.rds"))
+  
+  # Plot response curves for the selected models
+  resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
                               models.chosen = selected_models,
                               # show.variables = cur_vars,
-                              fixed.var = "mean",
+                              fixed.var = "mean", # Fix the variable at the mean value
                               data_species = proj_names@data.species,
-                              do.plot = FALSE,
+                              do.plot = FALSE, # Do not plot here (only generate the response table)
                               do.progress = FALSE)$tab
-
-colnames(resp) <- c("Index", "Variable", "Var.value", "Model", "Response")
-
-# setwd(str_c("C:/Users/ElenaPC/Documents/Quentin_M2/models",Epoque[j],"/",Method[l],sep=""))
-
-p<-ggplot() +
+  
+  colnames(resp) <- c("Index", "Variable", "Var.value", "Model", "Response")
+  
+  # Plot the response curves for each model
+  response <-ggplot() +
   geom_line(data = resp[grep('RF', resp$Model), ],
             aes(x = Var.value, y = Response, group = Model), col = "darkgreen",alpha = 0.2) +
   geom_line(data = resp[grep('XGBOOST', resp$Model), ],
@@ -142,20 +150,19 @@ p<-ggplot() +
   theme_bw() +
   ylim(0, 1.1) +
   xlab("Variable value")
-
-save_dir <- paste0("output/Relation_Environnement")
-
-if(!dir.exists(save_dir)) {
+  
+  # Create the output directory for figures if it doesn't exist
+  save_dir <- paste0("output/Relation_Environnement")
+  if(!dir.exists(save_dir)) {
   dir.create(save_dir)
-}
-
-ggsave(str_c(save_dir, "/",Sp,".jpeg",sep=""),
-       p,
-       # "jpeg",
+  }
+  
+  # Save the plot 
+  ggsave(str_c(save_dir, "/",Sp,".jpeg",sep=""),
+         response,
        dpi = 2000,
        bg = NULL,
        width = 11,
        height = 8.5,
-       units = "in"
-)
+       units = "in")
 }
