@@ -8,6 +8,7 @@ library(tidyverse)
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
+
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Get the current species name
@@ -59,7 +60,7 @@ for (i in 1:length(Vect_Sp)) {
   XGBOOST_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
     nrounds = 1000,  # number of iterations
     eta = 0.05,  # learning rate
-    max_depth = 7,  # depth of trees
+    max_depth = 3,  # depth of trees
     subsample = 0.9,  # Use 90% of the data for each tree
     objective = "binary:logistic", # Binary logistic regression
     gamma = 1,  # Regularization to avoid overfitting

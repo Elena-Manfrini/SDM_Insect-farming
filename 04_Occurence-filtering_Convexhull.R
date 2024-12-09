@@ -20,6 +20,7 @@ Vect_Sp <- Species$Vect_Sp
 # Change baseline Spat raster as raster
 baseline_raster <- as(Rastack, "Raster")
 
+i <- 1
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
@@ -201,21 +202,21 @@ for (i in 1:length(Vect_Sp)) {
     ggplot() +
       #   # Add a rectangle for the extent of the env_space dataframe
       geom_rect(aes(xmin = min(env_space$bio5), xmax = max(env_space$bio5), 
-                    ymin = min(env_space$bio7), ymax = max(env_space$bio7)),
+                    ymin = min(env_space$bio2), ymax = max(env_space$bio2)),
                 fill = "green", alpha = 0.5) +
       # Add a rectangle for the extent of the Convex_hull dataframe
       geom_rect(aes(xmin = min(var.occ_convhull$bio5), xmax = max(var.occ_convhull$bio5), 
-                    ymin = min(var.occ_convhull$bio7), ymax = max(var.occ_convhull$bio7)),
+                    ymin = min(var.occ_convhull$bio2), ymax = max(var.occ_convhull$bio2)),
                 fill = "blue") +
       # Plot the points for occurences as black dots
-      geom_point(data = var.occ_2, aes(x = bio5, y = bio7), color = "black", size = 0.5) +
+      geom_point(data = var.occ_2, aes(x = bio5, y = bio2), color = "black", size = 0.5) +
       # Plot points for the Convex_hull dataframe
-      geom_point(data = var.occ_convhull, aes(x = bio5, y = bio7), color = "red",size = 0.5) +
+      geom_point(data = var.occ_convhull, aes(x = bio5, y = bio2), color = "red",size = 0.5) +
       #   # Customize plot limits for better visualization
       xlim(min(c(env_space$bio5, env_space$bio5)) - 1, 
            max(c(env_space$bio5, env_space$bio5)) + 1) +
-      ylim(min(c(env_space$bio7, env_space$bio7)) - 1, 
-           max(c(env_space$bio7, env_space$bio7)) + 1) +
+      ylim(min(c(env_space$bio2, env_space$bio2)) - 1, 
+           max(c(env_space$bio2, env_space$bio2)) + 1) +
       #   # Add labels and title
       labs(title = "Extent Comparison Between env_space and Convex_hull",
            x = "bio5", y = "bio7") +
@@ -231,11 +232,11 @@ for (i in 1:length(Vect_Sp)) {
     plot_list <- list()
     # Define a list of colors for each variable
     colors <- c("bio5" = "brown1",   # Blue
-                "bio7" = "brown",   # Orange
-                "hurs_min" = "#2BDBCA", # Green
+                "bio2" = "brown",   # Orange
+                "hurs_mean" = "#2BDBCA", # Green
                 "hurs_range" = "#488680", # Red
                 "npp" = "green4",     # Purple
-                "globalCropland_2010CE" = "#DB792C")  # Brown
+                "globalCropland_2000CE" = "#DB792C")  # Brown
     # 
     # Loop over each environmental variable and create a boxplot for each
     for (var in unique(var.occ_2_long$Variable)) {
@@ -266,3 +267,4 @@ for (i in 1:length(Vect_Sp)) {
       stop("The number of occurrences is less than or equal to 60. Exiting the script.")
     }
 }
+

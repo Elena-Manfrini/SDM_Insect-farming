@@ -11,7 +11,7 @@ Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
 # Loop over each species to process occurrence data
-for (i in 1:length(Vect_Sp)) {
+for (i in 1:7) {
   Sp <- Vect_Sp[[i]] # Get the current species name.
   
   # Load pre-trained model outputs for the species

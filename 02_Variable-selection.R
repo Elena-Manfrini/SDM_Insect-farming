@@ -25,14 +25,14 @@ for (i in 1:length(Vect_Vars)) {
   # Load each raster file as a SpatRaster object
   raster_path <- paste0("data/raw/bioclim/", Name_Var, ".tif")
   raster <- rast(raster_path)
-  raster <- aggregate(raster, fact = 25, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
+  raster <- aggregate(raster, fact = 5, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
   # Add the raster to the list with its corresponding variable name
   raster_list[[Name_Var]] <- raster
 }
 
 # Ensure that all variables are on the same extent --> This is not the case here.
 # Convert globalCropland_2010CE raster to same extent as CHELSA variables
-raster_list[["globalCropland_2010CE"]] <- resample(raster_list[["globalCropland_2010CE"]], 
+raster_list[["globalCropland_2000CE"]] <- resample(raster_list[["globalCropland_2000CE"]], 
                                                    raster_list[["CHELSA_npp"]])
 
 # stack rasters
@@ -55,6 +55,12 @@ land <- vect("data/raw/ne_10m_land.shp")
 
 ## Rastack with values only for land
 Rastack <- mask(Rastack,land)
+
+# Define the extent to crop: latitude between -60 and 75
+extent_to_crop <- ext(-180.0001,  179.9999, -60, 75)
+
+# Crop the raster stack
+Rastack <- crop(Rastack, extent_to_crop)
 
 # Save the final raster stack with all variables
 writeRaster(Rastack, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE)
@@ -94,7 +100,7 @@ dev.off()
 ############# 3. Construction of the final baseline environmental dataset
 
 # Stack the definitive environmental variables into a single raster object
-Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2010CE")]]
+Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2000CE")]]
 
 names(Rastack_fin) <- gsub("CHELSA_", 
                            "",
