@@ -1,9 +1,8 @@
 library(terra)
 library(openxlsx)
-library(biomod2)
 library(xgboost)
-library(ggplot2)
-library(plotly)
+library(caret)
+library(pROC)
 
 # Load Environmental Space
 envir.space <- readRDS("data/Environmental_Space.rds")
@@ -15,10 +14,9 @@ Rastack <- rast("data/final_baseline.tif")
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
-i <- 1
-
 best_model <- data.frame()
 
+i <-  1
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
@@ -48,7 +46,6 @@ for (i in 1:length(Vect_Sp)) {
   # XY coordinates of the species' presence points
   cursp.xy <- Fin_occ_var[, c("x", "y")] 
   
-  PA <- 1
   # Loop to sample pseudo-absence points for each run (outside the convex hull and presence pixels)
   for (PA in 1:runs.PA){
     
@@ -72,22 +69,24 @@ for (i in 1:length(Vect_Sp)) {
     pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
                              (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
     
+  }
     
-    cursp.rundata$Observed[is.na(cursp.rundata$Observed)] <- 0
-    cursp.rundata$Observed <- as.numeric(as.character(cursp.rundata$Observed))
+  cursp.rundata$Observed[is.na(cursp.rundata$Observed)] <- 0
+  cursp.rundata$Observed <- as.character(cursp.rundata$Observed)
     
-    var <- cursp.rundata[,-1]
+  calibration <- sample(nrow(cursp.rundata), 0.7 * nrow(cursp.rundata))
     
-    calibration <- sample(nrow(cursp.rundata), 0.7 * nrow(cursp.rundata))
+    train <- cursp.rundata[calibration, ]
+    test <- cursp.rundata[-calibration, ]
     
-    var_train <- var[calibration, ]
-    var_test <- var[-calibration, ]
-    observed_train <- as.factor(cursp.rundata$Observed[calibration])
-    observed_test <- as.factor(cursp.rundata$Observed[-calibration])
+    print(paste("Training set size:", dim(train)[1]))
+    print(paste("Test set size:", dim(test)[1]))
     
-    print(paste("Training set size:", dim(var_train)[1]))
-    print(paste("Test set size:", dim(var_test)[1]))
     
+    dtrain <- xgb.DMatrix(data = as.matrix(train[,-1]), label = train$Observed)
+    dtest <- xgb.DMatrix(data = as.matrix(test[,-1]), label = test$Observed)
+    
+    # Define parameter grid for tuning
     param_grid <- expand.grid(
       nrounds = c(300,500, 1000),     # Number of boosting rounds
       max_depth = c(5, 7, 9),                  # Maximum depth of a tree
@@ -95,38 +94,58 @@ for (i in 1:length(Vect_Sp)) {
       gamma = c(0, 1, 5),                      # Minimum loss reduction to make a split
       colsample_bytree = 0.8,       # Subsampling ratio of columns
       min_child_weight = 1,          # Minimum sum of instance weight needed in a child
-      subsample = 1               # Subsampling ratio of the training instance
+      subsample = 1
     )
     
-    # Create a caret train control
-    train_control <- trainControl(
-      method = "cv",                            # Cross-validation
-      number = 5,                               # Number of folds
-      verboseIter = TRUE,                       # Print training progress
-      allowParallel = TRUE                      # Enable parallel processing
+    best_auc <- 0
+    best_params <- list()
+    
+    # Hyperparameter tuning using grid search
+    for (i in 1:nrow(param_grid)) {
+      params <- list(
+        objective = "binary:logistic",
+        eval_metric = "auc",
+        max_depth = param_grid$max_depth[i],
+        eta = param_grid$eta[i],
+        gamma = param_grid$gamma[i],
+        colsample_bytree = param_grid$colsample_bytree[i],
+        min_child_weight = param_grid$min_child_weight[i],
+        subsample = param_grid$subsample[i]
+      )
+    
+      # Cross-validation for AUC
+      cv_results <- xgb.cv(
+        params = params,
+        data = dtrain,
+        nrounds = 1000,
+        nfold = 5,
+        stratified = TRUE,
+        verbose = FALSE,
+        early_stopping_rounds = 10
+      )
+      
+      mean_auc <- max(cv_results$evaluation_log$test_auc_mean)
+      if (mean_auc > best_auc) {
+        best_auc <- mean_auc
+        best_params <- params
+      }
+    }
+    
+    # Train the final model with the best parameters
+    final_model <- xgb.train(
+      params = best_params,
+      data = dtrain,
+      nrounds = 1000,
+      watchlist = list(train = dtrain, test = dtest),
+      verbose = TRUE
     )
     
-    # Train the model using caret's train function
-    xgb_model <- train(
-      x = as.matrix(var_train),
-      y = as.factor(observed_train),
-      method = "xgbTree",                       # XGBoost method in caret
-      trControl = train_control,                # Training control with CV
-      tuneGrid = param_grid,                    # Parameter grid
-      metric = "Accuracy"                       # Optimization metric
-    )
+    # Predict and evaluate
+    predictions <- predict(final_model, newdata = dtest)
+    pred_labels <- ifelse(predictions > 0.5, 1, 0)
+    confusion_matrix <- table(predicted = pred_labels, actual = test$Observed)
+    print(confusion_matrix)
     
-    # Best model
-    best_model <- rbind(best_model,
-      data.frame(
-      Species =Sp ,
-      PA = runs.PA,
-      xgb_model$bestTune))
-    
-    # Predictions on test set
-    observed_pred <- predict(xgb_model, as.matrix(var_test))
-    
-    # Evaluation metrics
-    confusionMatrix(as.factor(observed_pred), as.factor(observed_test))
-  }
+    auc_score <- auc(roc(test$Observed, predictions))
+    print(paste("Best AUC:", auc_score))
 }
