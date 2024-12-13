@@ -30,10 +30,9 @@ for(i in 1:nrow(vars)) {
     addresse <- paste0(
       "https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/climatologies/1981-2010/bio/CHELSA_",
       bioclim_fin, "_1981-2010_", "V.2.1.tif")
-    options(timeout=300)
   download.file(addresse,
                 destfile = paste0("data/raw/bioclim/", bioclim, ".tif"),
-                MODE = "wb",
+                mode = "wb",
                 quiet = TRUE)
 }
 
@@ -42,10 +41,10 @@ for(i in 1:nrow(vars)) {
 # Download globalCropland_2010CE.tif and add it on "./data/donnees_brutes/bioclim" folder.
 
 # Adresse of globalCropland_2010CE.tif
-addresse_cropland <- "https://zenodo.org/records/5105689/files/globalCropland_1000CE.tif?download=1"
-
+addresse_cropland <- "https://zenodo.org/records/5105689/files/globalCropland_2010CE.tif?download=1"
 download.file(addresse_cropland,
               destfile = paste0("data/raw/bioclim/", "globalCropland_2010CE", ".tif"),
+              mode = "wb",
               quiet = TRUE)
 
 cropland <- c("globalCropland_2010CE") # Add cropland data
