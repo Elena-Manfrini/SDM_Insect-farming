@@ -79,10 +79,10 @@ combinations <- combinations[complete.cases(combinations), ] # Remove rows with 
 
 intervals <- list(
   bio5 <- seq(floor(min(combinations[, 1])), ceiling(max(combinations[, 1])), by = 1),
-  bio2 <- seq(floor(min(combinations[, 2])), ceiling(max(combinations[, 2])), by = 0.2),
+  bio2 <- seq(floor(min(combinations[, 2])), ceiling(max(combinations[, 2])), by = 0.4),
   hurs_mean <- seq(floor(min(combinations[, 3])), ceiling(max(combinations[, 3])), by = 1),
   hurs_range <- seq(floor(min(combinations[, 4])), ceiling(max(combinations[, 4])), by = 1),
-  npp <- seq(floor(min(combinations[, 5])), ceiling(max(combinations[, 5])),by = 10),
+  npp <- seq(floor(min(combinations[, 5])), ceiling(max(combinations[, 5])),by = 100),
   croplands <- seq(floor(min(combinations[, 6])), ceiling(max(combinations[, 6])), by = 0.01)
   )
   

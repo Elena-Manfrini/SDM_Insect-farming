@@ -15,13 +15,14 @@ library(ggcorrplot) # for the correlation matrix
 
 # Retrieve all the variable names
 Vars <- read.xlsx("data/variable_names.xlsx")
-Vect_Vars <- Vars$vars
+Vars <- Vars[!Vars[, 1] %in% c("CHELSA_bio2", "CHELSA_bio7", "CHELSA_hurs_mean", "CHELSA_hurs_range", "globalCropland_2000CE"), ]
+#Vect_Vars <- Vars$vars
 
 # Create an empty list to store the rasters for each variable
 raster_list <- list()
 # Loop through each variable name and load the raster, converting to SpatRaster format if necessary
-for (i in 1:length(Vect_Vars)) {
-  Name_Var <- Vect_Vars[i] # Get the variable name
+for (i in 1:length(Vars)) {
+  Name_Var <- Vars[i] # Get the variable name
   # Load each raster file as a SpatRaster object
   raster_path <- paste0("data/raw/bioclim/", Name_Var, ".tif")
   raster <- rast(raster_path)
@@ -32,8 +33,8 @@ for (i in 1:length(Vect_Vars)) {
 
 # Ensure that all variables are on the same extent --> This is not the case here.
 # Convert globalCropland_2010CE raster to same extent as CHELSA variables
-raster_list[["globalCropland_2000CE"]] <- resample(raster_list[["globalCropland_2000CE"]], 
-                                                   raster_list[["CHELSA_npp"]])
+# raster_list[["globalCropland_2010CE"]] <- resample(raster_list[["globalCropland_2010CE"]], 
+#                                                    raster_list[["CHELSA_npp"]])
 
 # stack rasters
 Rastack <- rast(raster_list) # transform raster list into stack
@@ -82,6 +83,14 @@ groups <- removeCollinearity(Rastack, plot = T,
                              method = "spearman") # Spearman correlation used due to possible non-normal variable distribution
 dev.off()
 
+##### Evaluation des variance inflation factor
+
+vifs <- usdm::vif((Rastack)) # Toutes les variables
+
+# Retenir une seule par groupe de variables intercorrélées
+vifs <- usdm::vif(Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min","CHELSA_npp")]])
+
+
 ### 2.2 Correlation matrix
 # Rastack dataframe
 Rastack_df <- values(Rastack)
@@ -100,7 +109,7 @@ dev.off()
 ############# 3. Construction of the final baseline environmental dataset
 
 # Stack the definitive environmental variables into a single raster object
-Rastack_fin <- Rastack[[c("CHELSA_bio5","CHELSA_bio7","CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2000CE")]]
+Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min","CHELSA_npp")]]
 
 names(Rastack_fin) <- gsub("CHELSA_", 
                            "",
