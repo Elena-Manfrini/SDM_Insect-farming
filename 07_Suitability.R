@@ -10,13 +10,14 @@ Rastack <- rast("data/final_baseline.tif")
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
+i <- 1
 # Loop over each species to process occurrence data
 for (i in 1:7) {
   Sp <- Vect_Sp[[i]] # Get the current species name.
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
-  selected_models <- readRDS(paste0("models/", Sp, "/selected_models.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output_30itv.RDS"))
+  selected_models <- readRDS(paste0("models/", Sp, "/selected_models_30itv.RDS"))
   
   ############# 1. Projection of Models
   
@@ -84,7 +85,7 @@ for (i in 1:7) {
   
   # Save the plot
   ggsave(
-    str_c("figures/", Sp,"/Plot_Raster.jpeg",sep=""),
+    str_c("figures/", Sp,"/Plot_Raster_30itv.jpeg",sep=""),
     plot_raster ,
     # "jpeg",
     dpi = 1000,
@@ -122,7 +123,7 @@ for (i in 1:7) {
 
     # Save the standard deviation plot
     ggsave(
-      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation.jpeg",sep=""),
+      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_30itv.jpeg",sep=""),
       plot_raster_sd ,
       # "jpeg",
       dpi = 1000,

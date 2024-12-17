@@ -5,6 +5,9 @@ library(gridExtra)
 library(biomod2)
 library(dplyr)
 
+
+# var.intervals <- intervals
+
 ###################### Define computeEnvCombinations function ######################
 computeEnvCombinations <- function(env.stack,
                                    var.intervals,
@@ -77,14 +80,23 @@ values <- values(Rastack)
 combinations <- as.data.frame(values)
 combinations <- combinations[complete.cases(combinations), ] # Remove rows with NA
 
+# intervals <- list(
+#   bio5 <- seq(floor(min(combinations[, 1])), ceiling(max(combinations[, 1])), length.out = 5),
+#   hurs_min <- seq(floor(min(combinations[, 2])), ceiling(max(combinations[, 2])), by = 2),
+#   # hurs_mean <- seq(floor(min(combinations[, 3])), ceiling(max(combinations[, 3])), by = 1),
+#   # hurs_range <- seq(floor(min(combinations[, 4])), ceiling(max(combinations[, 4])), by = 1),
+#   npp <- seq(floor(min(combinations[, 3])), ceiling(max(combinations[, 3])),by = 100)
+#   # croplands <- seq(floor(min(combinations[, 6])), ceiling(max(combinations[, 6])), by = 0.01)
+#   )
+
 intervals <- list(
-  bio5 <- seq(floor(min(combinations[, 1])), ceiling(max(combinations[, 1])), by = 1),
-  bio2 <- seq(floor(min(combinations[, 2])), ceiling(max(combinations[, 2])), by = 0.4),
-  hurs_mean <- seq(floor(min(combinations[, 3])), ceiling(max(combinations[, 3])), by = 1),
-  hurs_range <- seq(floor(min(combinations[, 4])), ceiling(max(combinations[, 4])), by = 1),
-  npp <- seq(floor(min(combinations[, 5])), ceiling(max(combinations[, 5])),by = 100),
-  croplands <- seq(floor(min(combinations[, 6])), ceiling(max(combinations[, 6])), by = 0.01)
-  )
+  bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 30),
+  hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 30),
+  # hurs_mean = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 30),
+  # hurs_range = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 30),
+  npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 30)
+  # croplands = seq(min(combinations[, 6]), max(combinations[, 6]), length.out = 30)
+)
   
 names(intervals) <- names(Rastack)
   
@@ -95,7 +107,7 @@ envir.space <- computeEnvCombinations(
       env.stack = Rastack,
       var.intervals = intervals,
       plot = TRUE,
-      vars.to.plot = 1:5
+      vars.to.plot = 1:3
     )
     
 # Save environmental space for each step size
