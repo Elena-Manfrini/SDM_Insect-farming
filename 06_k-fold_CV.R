@@ -113,7 +113,7 @@ for (i in 1:length(Vect_Sp)) {
     do.progress = TRUE)
   
   # Save the modeling output
-  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output_30itv.rds"))
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output_80itv.rds"))
   
   
   ## 2.2.a Reponse curves
@@ -128,7 +128,7 @@ for (i in 1:length(Vect_Sp)) {
   selected_models <- Choosen_Model$full.name # Get the full names of selected models
   
   # Save the selected models
-  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_30itv.rds"))
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_80itv.rds"))
   
   # Plot response curves for the selected models
   resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
@@ -174,7 +174,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_30itv.jpeg",sep= ""),
+  ggsave(str_c(save_dir, "/",Sp,"_80itv.jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,
@@ -215,7 +215,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_30itv.jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,"_80itv.jpeg",sep=""),
          var_imp,
          dpi = 2000,
          bg = NULL,
