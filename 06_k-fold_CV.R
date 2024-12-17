@@ -174,7 +174,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,".jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,"_all-models.jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,

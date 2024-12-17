@@ -60,9 +60,6 @@ for (i in 1:length(Vect_Sp)) {
     
     # Append the coordinates of pseudo-absence points to the coordinate data
     cursp.xy <- rbind(cursp.xy,envir.space$coords[cursp.pseudoabs, ])
-    # data.frame(envir.space$coords,
-                        # xyFromCell(Rastack[[1]], 
-    #cursp.pseudoabs))
     
     pseudo_only <- rbind(pseudo_only,envir.space$coords[cursp.pseudoabs, ])
     
@@ -88,9 +85,9 @@ for (i in 1:length(Vect_Sp)) {
     
   ### Visualisation data
   plot(Rastack[[1]])
-  points(conv_hull_filtered[ , c("x", "y")], pch = 20, cex = 0.1, col = "blue")
-  points(pseudo_only[ , c("x", "y")], pch = 20, cex = 0.1, col = "orange")
-  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.1, col = "red")
+  points(conv_hull_filtered[ , c("x", "y")], pch = 20, cex = 0.5, col = "blue")
+  points(pseudo_only[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
+  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
   
   
   # Create the output directory for models if it doesn't exist
