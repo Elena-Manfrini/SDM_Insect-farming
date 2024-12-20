@@ -31,6 +31,11 @@ for (i in 1:length(Vars)) {
   raster_list[[Name_Var]] <- raster
 }
 
+# Upload Human pop density
+human_pop <- rast("data/raw/bioclim/BaseYear_1km/baseYr_total_2000.tif")
+human_pop <- aggregate(human_pop, fact = 5, fun="mean")
+raster_list[[human_pop]] <- human_pop
+
 # Ensure that all variables are on the same extent --> This is not the case here.
 # Convert globalCropland_2010CE raster to same extent as CHELSA variables
 # raster_list[["globalCropland_2010CE"]] <- resample(raster_list[["globalCropland_2010CE"]], 

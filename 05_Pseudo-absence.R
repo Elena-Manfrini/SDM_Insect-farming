@@ -15,7 +15,7 @@ Vect_Sp <- Species$Vect_Sp
 
 i <- 1
 # Loop over each species to process occurrence data
-for (i in 1:length(Vect_Sp)) {
+ for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   
   # Occurrence and environmental values for the species
@@ -32,6 +32,9 @@ for (i in 1:length(Vect_Sp)) {
   # Prepare environmental data for the species 
   cursp.rundata <- Fin_occ_var[,-c(1:2)] # Environmental conditions
   
+  # XY coordinates of the species' presence points
+  cursp.xy <- Fin_occ_var[, c("x", "y")] 
+  
   # Table for storing the pseudo-absence data 
   pseudoabs.biomod.table <- matrix(FALSE,
                                    nrow = nrow(Fin_occ_var) + runs.PA * number.PA,,
@@ -39,34 +42,29 @@ for (i in 1:length(Vect_Sp)) {
   colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA) # Column names for each PA run
   pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE # Set the presence points to TRUE
   
-  # XY coordinates of the species' presence points
-  cursp.xy <- Fin_occ_var[, c("x", "y")] 
-  
   pseudo_only <- data.frame()
-  
   # Loop to sample pseudo-absence points for each run (outside the convex hull and presence pixels)
-  for(PA in 1:runs.PA){
+   for(PA in 1:runs.PA){
     
-    # # Sample pseudo-absence points outside the convex hull
-    cursp.pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
-                              size = number.PA, # Same number as the presence points
-                              replace = FALSE) # No replacement, unique cells
-    
-    # Pseudo-absence data to the environmental data (NA as values in the "Observed" column)
-    cursp.rundata <- rbind.data.frame(
-      cursp.rundata,
-      data.frame(Observed = NA, # Observed is NA for pseudo-absence points
-                 envir.space$unique.conditions.in.env[cursp.pseudoabs, ])) # Environmental conditions for pseudo-absences
-    
-    # Append the coordinates of pseudo-absence points to the coordinate data
-    cursp.xy <- rbind(cursp.xy,envir.space$coords[cursp.pseudoabs, ])
-    
-    pseudo_only <- rbind(pseudo_only,envir.space$coords[cursp.pseudoabs, ])
-    
-    # Update the pseudo-absence table for the current run (mark rows as TRUE for pseudo-absence points)
-    pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
-                             (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
-  }
+     # # Sample pseudo-absence points outside the convex hull
+     cursp.pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
+                               size = number.PA, # Same number as the presence points
+                               replace = FALSE) # No replacement, unique cells
+     
+     # Pseudo-absence data to the environmental data (NA as values in the "Observed" column)
+     cursp.rundata <- rbind.data.frame(
+       cursp.rundata,
+       data.frame(Observed = NA, # Observed is NA for pseudo-absence points
+                  envir.space$unique.conditions.in.env[cursp.pseudoabs, ])) # Environmental conditions for pseudo-absences
+     
+     pseudo_only <- rbind(pseudo_only,envir.space$coords[cursp.pseudoabs, ])
+     # Append the coordinates of pseudo-absence points to the coordinate data
+     cursp.xy <- rbind(cursp.xy,envir.space$coords[cursp.pseudoabs, ])
+     
+     # Update the pseudo-absence table for the current run (mark rows as TRUE for pseudo-absence points)
+     pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
+                              (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
+   }
   
   
   #### Pseudo absence data for visualisation 

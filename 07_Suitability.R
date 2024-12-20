@@ -2,6 +2,7 @@ library(terra)
 library(raster)
 library(ggplot2)
 library(viridis)
+library(openxlsx)
 
 # Load environmental raster stack
 Rastack <- rast("data/final_baseline.tif")
@@ -52,17 +53,37 @@ for (i in 1:7) {
   
   # Convert raster to data frame for plotting
   raster_df <- as.data.frame(Projection_ens, xy = TRUE)
-
-  # Plot suitability raster
+  
+  ## Save drataframe
+  
+  # Create species-specific directories
+  save_dir <- paste0("output/", "Suitability")
+  if (!dir.exists(save_dir)) {
+    dir.create(save_dir)
+  }
+  
+  # Save the selected models
+  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_30itv.rds"))
+  
+  ## Plot suitability raster
+  
+  # Occurrence of the species to get coordinates
+  
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
+  
+  # Map
   plot_raster <- ggplot() +
     geom_tile(data = raster_df, aes(x = x, y = y, fill = Suitability)) +
     scale_fill_viridis(name = "Suitability", option = "D", direction = 1) +  
-    coord_equal() +  # Pour garder les proportions
-    theme_minimal() +  # Un thème propre
+    coord_equal() +  # Keep proportions
+    theme_minimal() +  
     labs(title = "Suitability Raster",
-         subtitle = Sp,
-         # caption = "Made with ggplot2"
+         subtitle = Sp
     ) +
+    geom_point(data =  Fin_occ_var,
+               aes(x = x, y = y),
+               colour = "brown",
+               size = 0.5) +
     theme(
       plot.title = element_text(size = 18, face = "bold"),
       plot.subtitle = element_text(size = 14, face = "italic"),
@@ -87,8 +108,7 @@ for (i in 1:7) {
   ggsave(
     str_c("figures/", Sp,"/Plot_Raster_30itv.jpeg",sep=""),
     plot_raster ,
-    # "jpeg",
-    dpi = 1000,
+    dpi = 500,
     bg = NULL,
     width = 15,
     height = 8.5,
@@ -103,10 +123,13 @@ for (i in 1:7) {
     # Convert standard deviation raster to data frame for plotting
     raster_sd_df <- as.data.frame(Projection_sd, xy = TRUE)
     
+    # Save the selected models
+    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod_30itv.rds"))
+    
     # Plot standard deviation raster
     plot_raster_sd <- ggplot() +
   geom_tile(data = raster_sd_df, aes(x = x, y = y, fill = Standard_deviation)) +
-  scale_fill_viridis(name = "Standard deviation", option = "A", direction = 1) +  
+  scale_fill_viridis(name = "Standard deviation", option = "inferno", direction = 1) +  
   coord_equal() +  # Pour garder les proportions
   theme_minimal() +  # Un thème propre
   labs(title = "Standard deviation Raster",
@@ -125,8 +148,7 @@ for (i in 1:7) {
     ggsave(
       str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_30itv.jpeg",sep=""),
       plot_raster_sd ,
-      # "jpeg",
-      dpi = 1000,
+      dpi = 500,
       bg = NULL, 
       width = 15,
       height = 8.5,
@@ -204,10 +226,10 @@ for (i in 1:7) {
     legend.key.height = unit(1, "cm"))
 
     ggsave(
-      str_c("figures/", Sp,"/Plot_RasterClass.jpeg",sep=""),
+      str_c("figures/", Sp,"/Plot_RasterClass_80itv.jpeg",sep=""),
       plot_raster_Class,
       # "jpeg",
-      dpi = 1000,
+      dpi = 500,
       bg = NULL, 
   width = 15,
   height = 8.5,
@@ -310,7 +332,7 @@ ggsave(
   
   # "jpeg",
   
-  dpi = 1000,
+  dpi = 500,
   
   bg = NULL,
   

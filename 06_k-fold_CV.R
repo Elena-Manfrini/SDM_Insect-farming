@@ -113,10 +113,13 @@ for (i in 1:length(Vect_Sp)) {
     do.progress = TRUE)
   
   # Save the modeling output
-  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output_80itv.rds"))
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output_30itv.rds"))
   
   
   ## 2.2.a Reponse curves
+  
+  # Load pre-trained model outputs for the species
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output_30itv.RDS"))
   
   # Get the evaluation results for each model
   evals <- get_evaluations(myBiomodModelOut)
@@ -128,7 +131,7 @@ for (i in 1:length(Vect_Sp)) {
   selected_models <- Choosen_Model$full.name # Get the full names of selected models
   
   # Save the selected models
-  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_80itv.rds"))
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_30itv.rds"))
   
   # Plot response curves for the selected models
   resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
@@ -142,31 +145,50 @@ for (i in 1:length(Vect_Sp)) {
   colnames(resp) <- c("Index", "Variable", "Var.value", "Model", "Response")
   
   # Plot the response curves for each model
-  response <- ggplot() +
-    geom_line(data = resp[grep('RF', resp$Model), ],
-              aes(x = Var.value, y = Response, color = 'RF'), alpha = 0.2) +
-    geom_line(data = resp[grep('XGBOOST', resp$Model), ],
-              aes(x = Var.value, y = Response, color = 'XGBOOST'), alpha = 0.2) +
-    geom_line(data = resp[grep('MAXNET', resp$Model), ], 
-              aes(x = Var.value, y = Response, color = 'MAXNET'), alpha = 0.2) +
-    geom_line(data = resp[grep('GAM', resp$Model), ], 
-              aes(x = Var.value, y = Response, color = 'GAM'), alpha = 0.2) +
-    geom_line(data = resp[grep('GLM', resp$Model), ], 
-              aes(x = Var.value, y = Response, color = 'GLM'), alpha = 0.2) +
-    geom_line(data = resp[grep('GBM', resp$Model), ], 
-              aes(x = Var.value, y = Response, color = 'GBM'), alpha = 0.2) +
-    facet_wrap(~ Variable, scales = "free_x") +
-    theme_bw() +
-    ylim(0, 1.1) +
-    xlab("Variable value") +
-    scale_color_manual(values = c('RF' = 'darkgreen', 
-                                  'XGBOOST' = 'darkblue', 
-                                  'MAXNET' = 'darkred', 
-                                  'GAM' = 'purple', 
-                                  'GLM' = 'orange', 
-                                  'GBM' = 'cyan')) +  # Custom color scale
-    labs(color = "Model")
   
+  model_colors <- c(
+         'RF' = '#26c031', 
+         'XGBOOST' = '#38599f', 
+         'MAXNET' = '#db1010', 
+         'GAM' = '#a338bb', 
+         'GLM' = '#d89533', 
+         'GBM' = '#4bb8f8'
+     )
+  
+  response <- ggplot(resp, aes(x = Var.value, y = Response))+ 
+    geom_line(alpha = 0.2, aes(group = Model)) + 
+    stat_smooth() +
+    facet_wrap(~Variable, scales = "free_x") + 
+    theme_bw() + # theme en noir et blanc
+    ylim(0, 1.1) + 
+    xlab("Variable value")
+  
+  
+  # response <- ggplot() +
+  #   geom_line(data = resp[grep('RF', resp$Model), ],
+  #             aes(x = Var.value, y = Response, color = 'RF'), alpha = 0.2) +
+  #   geom_line(data = resp[grep('XGBOOST', resp$Model), ],
+  #             aes(x = Var.value, y = Response, color = 'XGBOOST'), alpha = 0.2) +
+  #   geom_line(data = resp[grep('MAXNET', resp$Model), ], 
+  #             aes(x = Var.value, y = Response, color = 'MAXNET'), alpha = 0.2) +
+  #   geom_line(data = resp[grep('GAM', resp$Model), ], 
+  #             aes(x = Var.value, y = Response, color = 'GAM'), alpha = 0.2) +
+  #   geom_line(data = resp[grep('GLM', resp$Model), ], 
+  #             aes(x = Var.value, y = Response, color = 'GLM'), alpha = 0.2) +
+  #   geom_line(data = resp[grep('GBM', resp$Model), ], 
+  #             aes(x = Var.value, y = Response, color = 'GBM'), alpha = 0.2) +
+  #   facet_wrap(~ Variable, scales = "free_x") +
+  #   theme_bw() +
+  #   ylim(0, 1.1) +
+  #   xlab("Variable value") +
+  #   scale_color_manual(values = c('RF' = 'darkgreen', 
+  #                                 'XGBOOST' = 'darkblue', 
+  #                                 'MAXNET' = 'darkred', 
+  #                                 'GAM' = 'purple', 
+  #                                 'GLM' = 'orange', 
+  #                                 'GBM' = 'cyan')) +  # Custom color scale
+  #   labs(color = "Model")
+  # 
   # Create the output directory for figures if it doesn't exist
   save_dir <- paste0("output/Relation_Environnement")
   if(!dir.exists(save_dir)) {
@@ -174,7 +196,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_80itv.jpeg",sep= ""),
+  ggsave(str_c(save_dir, "/",Sp,"_30itv.jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,
@@ -200,12 +222,13 @@ for (i in 1:length(Vect_Sp)) {
     geom_boxplot() + 
     theme_bw() +
     ggtitle(Sp) + 
-    scale_color_manual(values = c('RF' = 'darkgreen', 
-                                  'XGBOOST' = 'darkblue', 
-                                  'MAXNET' = 'darkred', 
-                                  'GAM' = 'purple', 
-                                  'GLM' = 'orange', 
-                                  'GBM' = 'cyan')) +  # Custom color scale
+    scale_color_manual(values = c(
+      'RF' = '#26c031', 
+      'XGBOOST' = '#38599f', 
+      'MAXNET' = '#db1010', 
+      'GAM' = '#a338bb', 
+      'GLM' = '#d89533', 
+      'GBM' = '#4bb8f8')) +  # Custom color scale
     geom_jitter (alpha = 0.2, aes(col = Model))
   
   # Create the output directory for figures if it doesn't exist
@@ -215,7 +238,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_80itv.jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,"_30itv.jpeg",sep=""),
          var_imp,
          dpi = 2000,
          bg = NULL,

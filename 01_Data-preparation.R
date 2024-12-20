@@ -54,7 +54,29 @@ saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
 xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
                   row.names = FALSE)
 
-############# 3. Species occurrences download (from GBIF)
+#### 1.2 Human population density from Gao et al., 2020
+# We used cropland data from Cao et al., 2021 (https://doi.org/10.5194/essd-13-5403-2021)
+# Download globalCropland_2010CE.tif and add it on "./data/donnees_brutes/bioclim" folder.
+
+# Adresse of globalCropland_2010CE.tif
+addresse_cropland <- "https://zenodo.org/records/5105689/files/globalCropland_2010CE.tif?download=1"
+download.file(addresse_cropland,
+              destfile = paste0("data/raw/bioclim/", "globalCropland_2010CE", ".tif"),
+              mode = "wb",
+              quiet = TRUE)
+
+cropland <- c("globalCropland_2010CE") # Add cropland data
+vars <- rbind(vars,cropland) # Add cropland variable to the previous variable list
+
+saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
+xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
+                 row.names = FALSE)
+
+
+
+
+
+############# 2. Species occurrences download (from GBIF)
 
 Vect_Sp <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
              "Alphitobius diaperinus", "Musca domestica", 
