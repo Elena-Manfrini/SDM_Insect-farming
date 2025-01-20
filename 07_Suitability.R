@@ -63,7 +63,7 @@ for (i in 1:7) {
   }
   
   # Save the selected models
-  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_30itv.rds"))
+  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_80itv_6var.rds"))
   
   ## Plot suitability raster
   
@@ -106,7 +106,7 @@ for (i in 1:7) {
   
   # Save the plot
   ggsave(
-    str_c("figures/", Sp,"/Plot_Raster_30itv.jpeg",sep=""),
+    str_c("figures/", Sp,"/Plot_Raster_80itv_6var.jpeg",sep=""),
     plot_raster ,
     dpi = 500,
     bg = NULL,
@@ -124,7 +124,7 @@ for (i in 1:7) {
     raster_sd_df <- as.data.frame(Projection_sd, xy = TRUE)
     
     # Save the selected models
-    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod_30itv.rds"))
+    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod_80itv_6var.rds"))
     
     # Plot standard deviation raster
     plot_raster_sd <- ggplot() +
@@ -146,7 +146,7 @@ for (i in 1:7) {
 
     # Save the standard deviation plot
     ggsave(
-      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_30itv.jpeg",sep=""),
+      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_80itv_6var.jpeg",sep=""),
       plot_raster_sd ,
       dpi = 500,
       bg = NULL, 

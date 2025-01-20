@@ -1,0 +1,73 @@
+---
+title: "Test-0"
+author: "Eléna"
+date: "2025-01-20"
+output: word_document
+---
+
+facteur 15 pour aller plus vite.
+
+
+```{r, fig.cap="Colinéarité des variables", out.width="50%", echo=FALSE}
+
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/output/collinearity_groups.png")
+```
+```{r, fig.cap="Matrice de correlation", out.width="50%", echo=FALSE}
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/output/correlation_matrix.png")
+```
+Pour ce test, nous utilisons 6 variables : 
+
+- Bio5 (température maximale)
+- Bio7 (range température)
+- Hurs_min (humidité minimale)
+- Hurs_range (range d'humidité)
+- NPP (productivité primaire nette)
+- globalCropland_2010CE (terres cultivées 2010)
+
+Valeurs au sein ds intervalles = 80 :
+
+intervals <- list(
+  bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 80),
+  hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 80),
+  hurs_mean = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 80),
+  hurs_range = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 80),
+  npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 80),
+  croplands = seq(min(combinations[, 6]), max(combinations[, 6]), length.out = 80)
+)
+
+
+Espace environnemental : 
+Total number of cells with environmental conditions in the geographical space: 979220
+Number of duplicated conditions: 374902
+Number of unique cells (environmental space): 604318
+
+
+Pour ce test, nous nous concentrons sur la mouche soldat noire (Hermetia illucens) qui compte 17 216 occurrences avant les étapes de filtrage.
+
+Après avoir appliquées les étapes de filtrations des occurences, le nombre utilisable pour calculer nos modèles est réduit à 5690.
+
+```{r, fig.cap="Repartition des occurences le long des variables",  echo=FALSE, out.width="50%"}
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/output/Filt_occurrences_plot/Variable_response_Hermetia illucens_80itv_6var.png")
+```
+ 
+ ## 
+
+```{r, fig.cap="Courbes de réponses des variables utilisées pour le test 0",  echo=FALSE, out.width="50%"}
+
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/output/Relation_Environnement/Hermetia illucens_80itv_6var.jpeg")
+```
+```{r, fig.cap="Importance des variables dans la prédiction de l'établissement de l'espèce par les modèles", echo=FALSE, out.width="50%"}
+
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/output/Variable_Importance/Hermetia illucens_80itv_6var.jpeg")
+```
+### Carte d'indice de favorabilité
+
+```{r, fig.cap="Indice de favorabilité final", echo=FALSE, out.width="50%"}
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/figures/Hermetia illucens/Plot_Raster_80itv_6var.jpeg")
+```
+
+### Carte incertitude
+
+```{r, fig.cap="Incertitude des modèles", echo=FALSE, out.width="50%"}
+knitr::include_graphics("~/These-Elena/SDM_insects/SDM_Insect-farming/figures/Hermetia illucens/Plot_Raster_Standard-deviation_80itv_6var.jpeg")
+```

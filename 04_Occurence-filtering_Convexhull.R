@@ -1,4 +1,5 @@
 # ####################### Occurrence filtering & Convexhull
+rm(list=ls())
 library(terra)
 library(openxlsx)
 library(raster)
@@ -254,7 +255,7 @@ for (i in 1:length(Vect_Sp)) {
     all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
                               top = Sp)
     # # Save the grid to a PNG file
-    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, "_30itv.png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, "_80itv_6var.png"), plot = all_plots, width = 10, height = 8, dpi = 300)
     # 
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
