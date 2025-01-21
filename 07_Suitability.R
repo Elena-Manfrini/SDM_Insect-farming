@@ -1,8 +1,10 @@
+rm(list=ls())
 library(terra)
 library(raster)
 library(ggplot2)
 library(viridis)
 library(openxlsx)
+library(biomod2)
 
 # Load environmental raster stack
 Rastack <- rast("data/final_baseline.tif")
@@ -17,9 +19,9 @@ for (i in 1:7) {
   Sp <- Vect_Sp[[i]] # Get the current species name.
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output_30itv.RDS"))
-  selected_models <- readRDS(paste0("models/", Sp, "/selected_models_30itv.RDS"))
-  
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
+  selected_models <- readRDS(paste0("models/", Sp, "/selected_models.RDS"))
+
   ############# 1. Projection of Models
   
   ### 1.1 Individual models
@@ -63,7 +65,7 @@ for (i in 1:7) {
   }
   
   # Save the selected models
-  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_80itv_6var.rds"))
+  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod.rds"))
   
   ## Plot suitability raster
   
@@ -106,7 +108,7 @@ for (i in 1:7) {
   
   # Save the plot
   ggsave(
-    str_c("figures/", Sp,"/Plot_Raster_80itv_6var.jpeg",sep=""),
+    str_c("figures/", Sp,"/Plot_Raster.jpeg",sep=""),
     plot_raster ,
     dpi = 500,
     bg = NULL,
@@ -124,7 +126,7 @@ for (i in 1:7) {
     raster_sd_df <- as.data.frame(Projection_sd, xy = TRUE)
     
     # Save the selected models
-    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod_80itv_6var.rds"))
+    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod.rds"))
     
     # Plot standard deviation raster
     plot_raster_sd <- ggplot() +

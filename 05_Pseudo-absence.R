@@ -1,3 +1,4 @@
+rm(list=ls())
 library(terra)
 library(openxlsx)
 library(biomod2)

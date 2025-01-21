@@ -1,3 +1,4 @@
+rm(list=ls())
 library(openxlsx)
 library(blockCV)
 library(biomod2)
@@ -40,7 +41,7 @@ for (i in 1:length(Vect_Sp)) {
   # Create empty lists to store parameter configurations for different models
   RF_param_list <- list()
   XGBOOST_param_list <- list()
-  MAXNET_param_list <- list()
+  # MAXNET_param_list <- list()
   
   # Loop over each cross-validation run to adjust model parameters
   for (cvrun in 1:nrow(calib_summary)) {
@@ -72,26 +73,28 @@ for (i in 1:length(Vect_Sp)) {
     verbose = 0
   )
   
-  # # MAXNET model parameters
-   MAXNET_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-     l1_regularizer = 0.1,  # L1 regularization to prevent overfitting
-     l2_regularizer = 0.1,  # L2 regularization to prevent overfitting
-     use_sgd = TRUE, # Use stochastic gradient descent
-     set_heldout = 0, # No held-out data for validation
-     verbose = TRUE
-   )
+  # MAXNET model parameters
+  #  MAXNET_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
+  #    l1_regularizer = 0.1,  # L1 regularization to prevent overfitting
+  #    l2_regularizer = 0.1,  # L2 regularization to prevent overfitting
+  #    use_sgd = TRUE, # Use stochastic gradient descent
+  #    set_heldout = 0, # No held-out data for validation
+  #    verbose = TRUE
+  #  )
   }
   
   # Define modeling options
   model_parameters <- bm_ModelingOptions(
     data.type = "binary", # Binary classification (presence/absence)
-    models = c('RF', 'XGBOOST','MAXNET', 'GAM', 'GLM', 'GBM'),  # Full list of models
+    models = c('RF', 'XGBOOST','MAXNET', 'GLM', 'GBM'),  # Full list of models
     strategy = "user.defined",
     user.base = "default",
     user.val = list(
       RF.binary.randomForest.randomForest = RF_param_list,
-      XGBOOST.binary.xgboost.xgboost = XGBOOST_param_list,
-      MAXNET.binary.maxnet.maxnet = MAXNET_param_list), 
+      XGBOOST.binary.xgboost.xgboost = XGBOOST_param_list
+      # ,
+      # MAXNET.binary.maxnet.maxnet = MAXNET_param_list
+      ), 
     bm.format = proj_names, # Input model data
     calib.lines = table_cv # Cross-validation table
   ) 
@@ -102,7 +105,7 @@ for (i in 1:length(Vect_Sp)) {
   myBiomodModelOut <- BIOMOD_Modeling(
     proj_names,
     modeling.id = "Modeling",
-    models = c('RF', 'XGBOOST','MAXNET', 'GAM', 'GLM', 'GBM'),
+    models = c('RF', 'XGBOOST','MAXNET', 'GLM', 'GBM'),
     OPT.strategy = "user.defined",
     OPT.user = model_parameters,
     CV.strategy = 'user.defined',
@@ -113,13 +116,13 @@ for (i in 1:length(Vect_Sp)) {
     do.progress = TRUE)
   
   # Save the modeling output
-  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output_30itv.rds"))
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output.rds"))
   
   
-  ## 2.2.a Reponse curves
+  ## 2.2.a Response curves
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output_30itv.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
   
   # Get the evaluation results for each model
   evals <- get_evaluations(myBiomodModelOut)
@@ -131,7 +134,7 @@ for (i in 1:length(Vect_Sp)) {
   selected_models <- Choosen_Model$full.name # Get the full names of selected models
   
   # Save the selected models
-  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_30itv.rds"))
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models.rds"))
   
   # Plot response curves for the selected models
   resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
@@ -144,51 +147,28 @@ for (i in 1:length(Vect_Sp)) {
   
   colnames(resp) <- c("Index", "Variable", "Var.value", "Model", "Response")
   
-  # Plot the response curves for each model
+  # Extract the model type from the 'Model' column
+  resp <- resp %>%
+    mutate(Model_Type = sub(".*_(RF|GBM|GLM|GAM|XGBOOST|MAXNET)$", "\\1", Model))
   
-  model_colors <- c(
-         'RF' = '#26c031', 
-         'XGBOOST' = '#38599f', 
-         'MAXNET' = '#db1010', 
-         'GAM' = '#a338bb', 
-         'GLM' = '#d89533', 
-         'GBM' = '#4bb8f8'
-     )
   
-  response <- ggplot(resp, aes(x = Var.value, y = Response))+ 
-    geom_line(alpha = 0.2, aes(group = Model)) + 
-    stat_smooth() +
+  response <- ggplot(resp, aes(x = Var.value, y = Response)) + 
+    geom_line(alpha = 0.2, aes(group = Model, color = Model_Type)) +  # Use Model_Type for color
+    stat_smooth(color = "black") + #Trend line
     facet_wrap(~Variable, scales = "free_x") + 
-    theme_bw() + # theme en noir et blanc
+    theme_bw() +  # Black-and-white theme
     ylim(0, 1.1) + 
-    xlab("Variable value")
-  
-  
-  # response <- ggplot() +
-  #   geom_line(data = resp[grep('RF', resp$Model), ],
-  #             aes(x = Var.value, y = Response, color = 'RF'), alpha = 0.2) +
-  #   geom_line(data = resp[grep('XGBOOST', resp$Model), ],
-  #             aes(x = Var.value, y = Response, color = 'XGBOOST'), alpha = 0.2) +
-  #   geom_line(data = resp[grep('MAXNET', resp$Model), ], 
-  #             aes(x = Var.value, y = Response, color = 'MAXNET'), alpha = 0.2) +
-  #   geom_line(data = resp[grep('GAM', resp$Model), ], 
-  #             aes(x = Var.value, y = Response, color = 'GAM'), alpha = 0.2) +
-  #   geom_line(data = resp[grep('GLM', resp$Model), ], 
-  #             aes(x = Var.value, y = Response, color = 'GLM'), alpha = 0.2) +
-  #   geom_line(data = resp[grep('GBM', resp$Model), ], 
-  #             aes(x = Var.value, y = Response, color = 'GBM'), alpha = 0.2) +
-  #   facet_wrap(~ Variable, scales = "free_x") +
-  #   theme_bw() +
-  #   ylim(0, 1.1) +
-  #   xlab("Variable value") +
-  #   scale_color_manual(values = c('RF' = 'darkgreen', 
-  #                                 'XGBOOST' = 'darkblue', 
-  #                                 'MAXNET' = 'darkred', 
-  #                                 'GAM' = 'purple', 
-  #                                 'GLM' = 'orange', 
-  #                                 'GBM' = 'cyan')) +  # Custom color scale
-  #   labs(color = "Model")
-  # 
+    xlab("Variable value") +
+    scale_color_manual(values = c(
+      'RF' = '#26c031', 
+      'XGBOOST' = '#38599f', 
+      'MAXNET' = '#db1010', 
+      'GAM' = '#a338bb', 
+      'GLM' = '#d89533', 
+      'GBM' = '#4bb8f8')) +  # Custom color scale
+    labs(color = "Model")
+
+   
   # Create the output directory for figures if it doesn't exist
   save_dir <- paste0("output/Relation_Environnement")
   if(!dir.exists(save_dir)) {
@@ -196,7 +176,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_30itv.jpeg",sep= ""),
+  ggsave(str_c(save_dir, "/",Sp,".jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,
@@ -238,7 +218,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_30itv.jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,".jpeg",sep=""),
          var_imp,
          dpi = 2000,
          bg = NULL,

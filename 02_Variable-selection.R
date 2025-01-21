@@ -1,3 +1,4 @@
+rm(list=ls())
 library(terra)
 library(sf)
 library(Rarity) # plot des correlations multiples
@@ -18,6 +19,8 @@ Vars <- read.xlsx("data/variable_names.xlsx")
 # Vars <- Vars[!Vars[, 1] %in% c("CHELSA_bio2", "CHELSA_bio7", "CHELSA_hurs_mean", "CHELSA_hurs_range", "globalCropland_2000CE"), ]
 Vect_Vars <- Vars$vars
 
+### 1.a Bioclimatic variables
+
 # Create an empty list to store the rasters for each variable
 raster_list <- list()
 # Loop through each variable name and load the raster, converting to SpatRaster format if necessary
@@ -26,23 +29,34 @@ for (i in 1:length(Vect_Vars)) {
   # Load each raster file as a SpatRaster object
   raster_path <- paste0("data/raw/bioclim/", Name_Var, ".tif")
   raster <- rast(raster_path)
-  raster <- aggregate(raster, fact = 15, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
+  raster <- aggregate(raster, fact = 5, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
   # Add the raster to the list with its corresponding variable name
   raster_list[[Name_Var]] <- raster
 }
 
-# Upload Human pop density
-human_pop <- rast("data/raw/bioclim/BaseYear_1km/baseYr_total_2000.tif")
-human_pop <- aggregate(human_pop, fact = 5, fun="mean")
-raster_list[[human_pop]] <- human_pop
+### 1.a Human pop density
+# # Upload Human pop density
+Human_pop_2000 <- rast("data/raw/bioclim/Human_pop/baseYr_total_2000.tif")
+Human_pop_2000 <- aggregate(Human_pop_2000, fact = 5, fun="mean")
+Human_pop_2000 <- resample(Human_pop_2000,
+                          raster_list[["CHELSA_npp"]])
+raster_list[["Human_pop_2000"]] <- Human_pop_2000
 
+
+### 1.b Cropland
+
+cropland <- rast("data/raw/bioclim/globalCropland_2010CE.tif")
+cropland <- aggregate(cropland, fact = 5, fun="mean")
 # Ensure that all variables are on the same extent --> This is not the case here.
 # Convert globalCropland_2010CE raster to same extent as CHELSA variables
-raster_list[["globalCropland_2010CE"]] <- resample(raster_list[["globalCropland_2010CE"]],
-                                                   raster_list[["CHELSA_npp"]])
+cropland <- resample(cropland,
+                           raster_list[["CHELSA_npp"]])
+raster_list[["globalCropland_2010CE"]] <- cropland
 
 # stack rasters
 Rastack <- rast(raster_list) # transform raster list into stack
+
+############# 2. Raster delimitation
 
 # To get values on continent and exclude thoose from oceans:
 # Download land on natural earth: https://www.naturalearthdata.com/downloads/
@@ -71,11 +85,15 @@ Rastack <- crop(Rastack, extent_to_crop)
 # Save the final raster stack with all variables
 writeRaster(Rastack, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE)
 
-############# 2. Check collineratity
+
+
+############# 3. Check collineratity
+
+
 # Load Raster
 Rastack <- rast("data/raw/bioclim/baseline.tif")
 
-### 2.1 Correlation tree
+### 3.a Correlation tree
 #Create a PNG to store the output image of the collinearity tree
 png("./output/collinearity_groups.png")
 
@@ -88,15 +106,7 @@ groups <- removeCollinearity(Rastack, plot = T,
                              method = "spearman") # Spearman correlation used due to possible non-normal variable distribution
 dev.off()
 
-##### Evaluation des variance inflation factor
-
-vifs <- usdm::vif((Rastack)) # Toutes les variables
-
-# Retenir une seule par groupe de variables intercorrélées
-vifs <- usdm::vif(Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min","CHELSA_npp")]])
-
-
-### 2.2 Correlation matrix
+### 3.b Correlation matrix
 # Rastack dataframe
 Rastack_df <- values(Rastack)
 Rastack_df <- as.data.frame(Rastack_df, xy = TRUE) # Keep only non-NA rows
@@ -111,10 +121,12 @@ png("./output/correlation_matrix.png")
 ggcorrplot(cor_matrix, method = "circle",  type = "upper")
 dev.off()
 
-############# 3. Construction of the final baseline environmental dataset
+
+############# 4. Construction of the final baseline environmental dataset
+
 
 # Stack the definitive environmental variables into a single raster object
-Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_bio7", "CHELSA_hurs_min","CHELSA_hurs_range", "CHELSA_npp", "globalCropland_2010CE")]]
+Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min", "CHELSA_npp")]]
 
 names(Rastack_fin) <- gsub("CHELSA_", 
                            "",

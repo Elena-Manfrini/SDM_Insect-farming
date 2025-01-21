@@ -36,7 +36,7 @@ for (i in 1:length(Vect_Sp)) {
     Occu_r <- as.data.frame(Occu_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
     
     # Combine occurrences with the baseline raster values
-    Rastab <- as.data.frame(baseline_raster[[1]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
+    Rastab <- as.data.frame(baseline_raster[[3]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
     Occu_r <- cbind(Occu_r,Rastab[[3]]) # Add variable values
     Occu_r <- Occu_r[complete.cases(Occu_r), ] # Remove occurrences outside land
     Occu_r <- Occu_r[, -4]
@@ -47,7 +47,7 @@ for (i in 1:length(Vect_Sp)) {
     
     # Extract environmental values at occurrence locations
     var.occ <- terra::extract(Rastack, Occu_r[, c("x", "y")])
-    var.occ <- var.occ[complete.cases(var.occ), ]
+    # var.occ <- var.occ[complete.cases(var.occ), ]
     
     # Map occurrences to environmental intervals based on initial variable ranges
     # In which grid cells do the occurrences fall based on the initial intervals provided?
@@ -255,7 +255,7 @@ for (i in 1:length(Vect_Sp)) {
     all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
                               top = Sp)
     # # Save the grid to a PNG file
-    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, "_80itv_6var.png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
     # 
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     

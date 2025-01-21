@@ -1,6 +1,6 @@
 # Initial download and creation of environmental data
 # Script to be run only once
-
+rm(list=ls())
 library(terra)
 library(sf)
 library(rnaturalearth)
@@ -41,7 +41,7 @@ for(i in 1:nrow(vars)) {
 # Download globalCropland_2010CE.tif and add it on "./data/donnees_brutes/bioclim" folder.
 
 # Adresse of globalCropland_2010CE.tif
-addresse_cropland <- "https://zenodo.org/records/5105689/files/globalCropland_2010CE.tif?download=1"
+addresse_cropland <- "https://zenodo.org/records/5759237/files/globalCropland_2010CE.tif?download=1"
 download.file(addresse_cropland,
               destfile = paste0("data/raw/bioclim/", "globalCropland_2010CE", ".tif"),
               mode = "wb",
@@ -49,32 +49,17 @@ download.file(addresse_cropland,
 
 cropland <- c("globalCropland_2010CE") # Add cropland data
 vars <- rbind(vars,cropland) # Add cropland variable to the previous variable list
-
-saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
-xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
-                  row.names = FALSE)
 
 #### 1.2 Human population density from Gao et al., 2020
-# We used cropland data from Cao et al., 2021 (https://doi.org/10.5194/essd-13-5403-2021)
-# Download globalCropland_2010CE.tif and add it on "./data/donnees_brutes/bioclim" folder.
+# We used cropland data from Gao et al., 2020 (https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-pd-sspbsyr-1km-1.01)
+# Download popdynamics-1-km-downscaled-pop-base-year-projection-ssp-2000-2100-rev01-proj-ssp1-geotiff.zip and add it on "./data/donnees_brutes/bioclim" folder.
 
-# Adresse of globalCropland_2010CE.tif
-addresse_cropland <- "https://zenodo.org/records/5105689/files/globalCropland_2010CE.tif?download=1"
-download.file(addresse_cropland,
-              destfile = paste0("data/raw/bioclim/", "globalCropland_2010CE", ".tif"),
-              mode = "wb",
-              quiet = TRUE)
-
-cropland <- c("globalCropland_2010CE") # Add cropland data
-vars <- rbind(vars,cropland) # Add cropland variable to the previous variable list
+human <- c("Human_pop_2000") # Add cropland data
+vars <- rbind(vars,human) # Add cropland variable to the previous variable list
 
 saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
 xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
                  row.names = FALSE)
-
-
-
-
 
 ############# 2. Species occurrences download (from GBIF)
 

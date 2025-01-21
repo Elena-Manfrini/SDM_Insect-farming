@@ -1,3 +1,4 @@
+rm(list=ls())
 library(terra)
 library(openxlsx)
 library(ggplot2)
@@ -90,12 +91,9 @@ combinations <- combinations[complete.cases(combinations), ] # Remove rows with 
 #   )
 
 intervals <- list(
-  bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 30),
-  hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 30),
-  # hurs_mean = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 30),
-  # hurs_range = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 30),
-  npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 30)
-  # croplands = seq(min(combinations[, 6]), max(combinations[, 6]), length.out = 30)
+  bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 80),
+  hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 80),
+  npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 80)
 )
   
 names(intervals) <- names(Rastack)
