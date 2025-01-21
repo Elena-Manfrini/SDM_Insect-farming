@@ -1,0 +1,1148 @@
+---
+title: "Modélisation des habitats potentiels des insectes massivement élevés"
+author: "Eléna Manfrini"
+date: "2025-01-21"
+output: word_document
+
+knitr:
+  opts_chunk: 
+    echo: true
+    message: false
+    warning: false
+
+body {
+  text-align: justify;
+}
+---
+
+Chargement des packages et fonctions necessaires pour faire nos projections
+
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+rm(list=ls())
+library(terra) # manipuler et analyser des données spatiales 
+library(sf) # analyse des données spatiales au format vecteur (points, lignes, polygones)
+# library(rnaturalearth) #  données géographiques naturelles et administratives globales provenant de Natural Earth.
+# library(rnaturalearthdata)
+library(rgbif) # Récupération des données d'occurences
+library(Rarity) # plot des correlations multiples
+library(virtualspecies) # plot des correlations multiples
+# library(sp)
+# library(geodata)
+library(openxlsx) # Ouvrir un fichier Excel
+library(ggplot2) # Figures
+library(ggcorrplot) # Pour la matrice de corrélation
+library(gridExtra)
+library(biomod2) # Package pour faire les prédictions
+library(dplyr)
+```
+
+# Préparation des données.
+
+## Variables.
+### Climatiques (CHELSA)
+
+```{r message=FALSE, warning=FALSE}
+
+# Création d'un vecteur contenant le nom des données climatiques
+vars <- c(paste0("bio", 1:11),  # Bioclimatic variables
+          paste0("hurs_",  c("max", "mean", "min", "range")), # Surface relative humidity variables
+          "npp" # Net primary productivity
+)
+
+vars <- data.frame(vars = vars) # Convert the variable names into a dataframe
+vars$vars <- paste0("CHELSA_", vars$vars) # Prefix variables with "CHELSA_"
+
+# 1.1.2  Download CHELSA data
+
+for(i in 1:nrow(vars)) {
+  bioclim <- vars[i,]
+  bioclim_fin <- gsub("CHELSA_", "", bioclim)
+    addresse <- paste0(
+      "https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/climatologies/1981-2010/bio/CHELSA_",
+      bioclim_fin, "_1981-2010_", "V.2.1.tif")
+  download.file(addresse,
+                destfile = paste0("data/raw/bioclim/", bioclim, ".tif"),
+                mode = "wb",
+                quiet = TRUE)
+}
+
+```
+
+
+
+### Socio économiques.
+
+#### Terres cultivées (Cao et al., 2021)
+
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+#### 1.2 Environmental predictors cropland data from Cao et al., 2021
+# We used cropland data from Cao et al., 2021 (https://doi.org/10.5194/essd-13-5403-2021)
+# Download globalCropland_2010CE.tif and add it on "./data/donnees_brutes/bioclim" folder.
+
+# Adresse of globalCropland_2010CE.tif
+addresse_cropland <- "https://zenodo.org/records/5759237/files/globalCropland_2010CE.tif?download=1"
+download.file(addresse_cropland,
+              destfile = paste0("data/raw/bioclim/", "globalCropland_2010CE", ".tif"),
+              mode = "wb",
+              quiet = TRUE)
+
+cropland <- c("globalCropland_2010CE") # Add cropland data
+vars <- rbind(vars,cropland) # Add cropland variable to the previous variable list
+```
+
+#### Population humaine mondiale (Gao et al., 2020)
+
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+
+#### 1.2 Human population density from Gao et al., 2020
+# We used cropland data from Gao et al., 2020 (https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-pd-sspbsyr-1km-1.01)
+# Download popdynamics-1-km-downscaled-pop-base-year-projection-ssp-2000-2100-rev01-proj-ssp1-geotiff.zip and add it on "./data/donnees_brutes/bioclim" folder.
+
+human <- c("Human_pop_2000") # Add cropland data
+vars <- rbind(vars,human) # Add cropland variable to the previous variable list
+
+saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
+xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
+                 row.names = FALSE)
+```
+      
+## Données d'occurrences (GBIF).
+
+Les espèces que nous allons modéliser sont :
+
+- La mouche soldat noire (Hermetia illucens)
+- Le ténébrion meunier (Tenebrio molitor)
+- Le cricket domestique (Acheta domesticus)
+- Le petit ténébrion mat (Alphitobius diaperinus)
+- La mouche domestique (Musca domestica)
+- Le grillon replel (Gryllodes sigillatus
+- Le cricket migrateur (Locusta migratoria)
+- Le grillon des steppes (Gryllus assimilis)
+
+Les données d'occurences recensées entre 1980 et 2024 sont téléchargées 
+
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+Vect_Sp <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
+             "Alphitobius diaperinus", "Musca domestica", 
+             "Gryllodes sigillatus", "Locusta migratoria", "Gryllus assimilis")
+
+Vect_Sp.df <- as.data.frame(Vect_Sp)
+
+xlsx::write.xlsx(Vect_Sp.df, "data/Species_names.xlsx",
+                 row.names = FALSE)
+
+
+log_file <- "data/raw/occurences/completion_log.txt"
+output_dir <- "data/raw/occurences"
+
+
+# Load completed species from the log file
+completed_species <- if (file.exists(log_file)) {
+  readLines(log_file)
+} else {
+  character()  # Initialize as empty if log file doesn't exist
+}
+
+
+for (i in 1:length(Vect_Sp)){
+  sp <- Vect_Sp[i] # Current species
+  
+  # Check if the species is already processed
+  if (sp %in% completed_species) {
+    message(sprintf("Skipping %s: already completed.", sp))
+    next
+  }
+  
+  # Progress message
+  message(sprintf("Processing %s (%d/%d)...", sp, i, length(Vect_Sp)))
+  
+  
+  # Download species occurrences from GBIF
+  occurrence <- occ_search(scientificName = sp,
+                           basisOfRecord = c("HUMAN_OBSERVATION",
+                                             "MACHINE_OBSERVATION"),
+                           year = '1980,2024', 
+                           limit = 300000,
+                           fields= "minimal")
+  # Create a dataframe for species occurrences (latitude and longitude)
+  Occu <- data.frame(
+    x = c(occurrence$HUMAN_OBSERVATION$data$decimalLongitude, 
+          occurrence$MACHINE_OBSERVATION$data$decimalLongitude),
+    y = c(occurrence$HUMAN_OBSERVATION$data$decimalLatitude, 
+          occurrence$MACHINE_OBSERVATION$data$decimalLatitude)
+  ) %>% na.omit() # Remove rows with missing values (NA)
+  #nrow(Occu) # Number of occurrences
+
+  # Save occurrences to an Excel file
+  output_file <- file.path(output_dir, paste0("Occurences_", sp, ".xlsx"))
+  xlsx::write.xlsx(Occu, output_file, row.names = FALSE)
+  
+  # Append the species to the completion log
+  write(sp, file = log_file, append = TRUE)
+  
+  message(sprintf("Completed %s.", sp))
+}
+```
+
+# Selection des variables
+## Rasteurisation des variables
+
+```{r echo = TRUE, message = FALSE, warning = FALSE}
+### 1.a Bioclimatic variables
+
+Vect_Vars <- vars$vars
+
+# Create an empty list to store the rasters for each variable
+raster_list <- list()
+# Loop through each variable name and load the raster, converting to SpatRaster format if necessary
+for (i in 1:length(Vect_Vars)) {
+  Name_Var <- Vect_Vars[i] # Get the variable name
+  # Load each raster file as a SpatRaster object
+  raster_path <- paste0("data/raw/bioclim/", Name_Var, ".tif")
+  raster <- rast(raster_path)
+  raster <- aggregate(raster, fact = 15, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
+  # Add the raster to the list with its corresponding variable name
+  raster_list[[Name_Var]] <- raster
+}
+
+### 1.a Human pop density
+# # Upload Human pop density
+Human_pop_2000 <- rast("data/raw/bioclim/Human_pop/baseYr_total_2000.tif")
+Human_pop_2000 <- aggregate(Human_pop_2000, fact = 15, fun="mean")
+Human_pop_2000 <- resample(Human_pop_2000,
+                          raster_list[["CHELSA_npp"]])
+raster_list[["Human_pop_2000"]] <- Human_pop_2000
+
+
+### 1.b Cropland
+
+cropland <- rast("data/raw/bioclim/globalCropland_2010CE.tif")
+cropland <- aggregate(cropland, fact = 15, fun="mean")
+# Ensure that all variables are on the same extent --> This is not the case here.
+# Convert globalCropland_2010CE raster to same extent as CHELSA variables
+cropland <- resample(cropland,
+                           raster_list[["CHELSA_npp"]])
+raster_list[["globalCropland_2010CE"]] <- cropland
+
+# stack rasters
+Rastack <- rast(raster_list) # transform raster list into stack
+```
+
+## Délimition des rasters
+
+```{r}
+# To get values on continent and exclude thoose from oceans:
+# Download land on natural earth: https://www.naturalearthdata.com/downloads/
+
+# land_adresse <- "https://naciscdn.org/naturalearth/10m/physical/ne_10m_land.zip"
+# download_land <- download.file(land_adresse, destfile = "data/raw/bioclim/land/land.zip")
+# land_folder <- "data/raw/bioclim/land/land.zip"
+# unzip(land_folder, exdir = "data/raw/bioclim/land")
+# ne_download(scale = 10,
+#             type = "land",
+#             category = "physical",
+#             destdir = "data/raw")
+              
+# Read the shapefile
+land <- vect("data/raw/ne_10m_land.shp")
+
+## Rastack with values only for land
+Rastack <- mask(Rastack,land)
+
+# Define the extent to crop: latitude between -60 and 75
+extent_to_crop <- ext(-180.0001,  179.9999, -60, 75)
+
+# Crop the raster stack
+Rastack <- crop(Rastack, extent_to_crop)
+
+# Save the final raster stack with all variables
+writeRaster(Rastack, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE)
+
+```
+
+## Colinéarité des variables
+### Arbre des corrélations
+
+```{r}
+### 3.a Correlation tree
+#Create a PNG to store the output image of the collinearity tree
+png("./output/collinearity_groups.png")
+
+# Remove highly collinear variables by grouping them using a correlation threshold
+groups <- removeCollinearity(Rastack, plot = T,
+                             # This tests for collinearity and groups variables that are inter-collinear
+                             multicollinearity.cutoff = 0.7, # Cutoff threshold
+                             # sample.points = TRUE,
+                             # nb.points = 50000,
+                             method = "spearman") # Spearman correlation used due to possible non-normal variable distribution
+dev.off()
+
+groups
+
+```
+
+### Matrice des corrélations
+
+```{r}
+### 3.b Correlation matrix
+# Rastack dataframe
+Rastack_df <- values(Rastack)
+Rastack_df <- as.data.frame(Rastack_df, xy = TRUE) # Keep only non-NA rows
+Rastack_df <- Rastack_df[complete.cases(Rastack_df), ] ## remove rows with NA
+
+#Calculate the correlation matrix
+cor_matrix <- cor(Rastack_df, method = "pearson")
+
+# plot the correlation matrix
+#Create a PNG to store the output image of the collinearity tree
+png("./output/correlation_matrix.png")
+ggcorrplot(cor_matrix, method = "circle",  type = "upper")
+dev.off()
+```
+
+### Selection des variables finales
+
+```{r}
+
+# Stack the definitive environmental variables into a single raster object
+Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min", "CHELSA_npp")]]
+
+names(Rastack_fin) <- gsub("CHELSA_", 
+                           "",
+                           names(Rastack_fin))
+
+## Save the final definitive raster
+writeRaster(Rastack_fin, filename = "data/final_baseline.tif", overwrite = TRUE)
+```
+
+# Filtration environnementale 
+
+1. Suppression des données manquantes:
+Toutes les lignes contenant au moins une valeur manquante dans l'une des variables sont retirées afin de ne conserver que les pixels présentant des données pour toutes les variables.
+
+2. Attribution des données à des intervalles prédéfinis:
+Les valeurs de chaque variable sont réparties dans des intervalles prédéfinis. En effet, chaque variable a été divisée en 80 segments égaux.
+
+3. Suppression des combinaisons redondantes:
+Les lignes présentant des combinaisons identiques de valeurs pour les variables sont supprimées, afin d'éliminer les doublons.
+
+4. Calcul de la médiane des intervalles:
+Pour chaque cellule correspondant à un intervalle donné, la médiane des valeurs de cet intervalle est calculée, puis utilisée comme valeur représentative pour les variables.
+
+```{r}
+###################### Define computeEnvCombinations function ######################
+computeEnvCombinations <- function(env.stack,
+                                   var.intervals,
+                                   plot = TRUE,
+                                   vars.to.plot = 1:3)
+{
+  # Convert the raster stack values to a data frame
+  combinations <- as.data.frame(values(Rastack[[c(names(Rastack))]]))
+  # Get coordinates for all cells in the raster stack and remove NA cells
+  all.xy <- xyFromCell(Rastack, 1:ncell(Rastack))
+  all.xy <- all.xy[- which(is.na(combinations[, 1])), ]
+  combinations <- combinations[- which(is.na(combinations[, 1])), ]
+  
+  # All possible combination in the environment
+  comb.cat <- sapply(colnames(combinations), function(x, combs, seqs.)
+    cut(combs[, x], breaks = seqs.[[x]], include.lowest = TRUE, right = FALSE),
+    combs = combinations, seqs. = var.intervals)      
+  
+  message("Total number of cells with environmental conditions in the geographical space: ", nrow(combinations),
+          "\nNumber of duplicated conditions: ", length(which(duplicated(comb.cat))),
+          "\nNumber of unique cells (environmental space): ", nrow(comb.cat[-which(duplicated(comb.cat)), ]))
+  
+  # Calculate midpoint values for each environmental variable interval
+  possible.combs <- lapply(var.intervals, function(x)
+    data.frame(interval = cut(x, x, right = FALSE, include.lowest = TRUE),
+               mids = midpoints(cut(x, x, right = FALSE, include.lowest = TRUE))))
+  
+  # Assign midpoint values for each environmental variable in the spatial grid
+  all.env.pixels <- sapply(colnames(comb.cat), function(x, int.to.replace, replacing.values)
+  {
+    replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
+  }, int.to.replace = comb.cat, replacing.values = possible.combs)
+  
+  # Remove duplicate cells in environmental space
+  duplicated.cells <- which(duplicated(all.env.pixels))
+  if(length(duplicated.cells)){
+    all.env.pixels <- all.env.pixels[-duplicated.cells, ]
+    all.xy <- all.xy[-duplicated.cells, ]
+  }
+  
+  # Optional 3D plot of the selected environmental variables
+  if(plot)
+  {
+    require(rgl)
+    rgl::plot3d(all.env.pixels[, vars.to.plot])
+  }
+  # Return a list containing detailed intervals, unique conditions, and coordinates
+  return(list(detailed.intervals = possible.combs,
+              unique.conditions.in.env = all.env.pixels,
+              coords = all.xy))
+}
+
+# Function to calculate midpoints of intervals
+midpoints <- function(x) {
+  lower <- as.numeric(gsub(",.*", "", gsub("\\(|\\[|\\)|\\]", "", x)))
+  upper <- as.numeric(gsub(".*,", "", gsub("\\(|\\[|\\)|\\]", "", x)))
+  midpoint <- lower + (upper - lower) / 2 ### ????? can't we just do the mean ??????
+  return(midpoint)
+}
+
+#########################################################################################
+
+
+############# 1. Environmental Space
+# Load environmental raster stack
+Rastack <- Rastack_fin
+
+# Get values from the raster stack, including NA for missing values (e.g., ocean areas)
+values <- values(Rastack) 
+combinations <- as.data.frame(values)
+combinations <- combinations[complete.cases(combinations), ] # Remove rows with NA
+
+## interval of 80 values for each variables
+intervals <- list(
+  bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 80),
+  hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 80),
+  npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 80)
+)
+  
+names(intervals) <- names(Rastack)
+  
+# Optionally save intervals for each step size as a separate file
+saveRDS(intervals, file = paste0("data/intervals.rds"))
+  
+envir.space <- computeEnvCombinations(
+      env.stack = Rastack,
+      var.intervals = intervals,
+      plot = TRUE,
+      vars.to.plot = 1:3
+    )
+    
+# Save environmental space for each step size
+saveRDS(envir.space, file = paste0("data/Environmental_Space.rds"))
+```
+
+# Filtration environnementale des occurrences
+
+1. Suppression des occurrences sans valeurs associées aux variables.
+
+2. Attribution des valeurs des variables aux points d'occurrence selon les intervalles prédéfinis.
+
+3. Suppression des combinaisons de valeurs redondantes.
+Les occurrences ayant des combinaisons identiques de valeurs pour les variables sont supprimées, de manière à conserver uniquement des combinaisons uniques.
+
+Résultat : Un tableau contenant les coordonnées des occurrences présentant des valeurs uniques dans l'espace environnemental.
+
+
+## Création du convexhull
+
+1. Calcul des valeurs médianes des intervalles pour chaque variable.
+
+2. Suppression des valeurs extrêmes pour la création du convex hull.
+Les 2,5 % des valeurs les plus élevées et les 2,5 % des valeurs les plus basses pour chaque variable sont supprimées. Cela permet de définir un convex hull, représentant l'espace climatique estimé dans lequel l'espèce se trouve.
+
+3. Identification des occurrences hors du convex hull.
+Les occurrences situées en dehors de l'espace défini par le convex hull sont récupérées.
+
+```{r}
+# Species name
+Species <- read.xlsx("data/Species_names.xlsx")
+Vect_Sp <- Species$Vect_Sp
+
+# Change baseline Spat raster as raster
+baseline_raster <- as(Rastack, "Raster")
+
+ i<- 1
+# Loop over each species to process occurrence data
+for (i in 1:length(Vect_Sp)) {
+  Sp <- Vect_Sp[[i]] # Current species name
+  Occu <- read.xlsx(paste0("data/raw/occurences/Occurences_", Sp, ".xlsx")) # Load occurrences for this species
+  ############# 2. Occurrences filtering
+    ### 2.1 Remove occurrences outside land
+    
+    # Proceed only if there are more than 10 occurrences per environmental variable
+    if (length(Occu$x) > 60){
+    # Rasterize occurrences to align with baseline raster
+    Occu_r <- rasterize(as.matrix(Occu[,1:2]), baseline_raster)
+    Occu_r <- as.data.frame(Occu_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
+    
+    # Combine occurrences with the baseline raster values
+    Rastab <- as.data.frame(baseline_raster[[3]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
+    Occu_r <- cbind(Occu_r,Rastab[[3]]) # Add variable values
+    Occu_r <- Occu_r[complete.cases(Occu_r), ] # Remove occurrences outside land
+    Occu_r <- Occu_r[, -4]
+    Occu_r[3] <- 1 # Assign presence = 1 for each occurrence
+    colnames(Occu_r) <- c("x","y","Observed") # Rename columns
+    
+    ### 2.2 Remove duplicated occurrences in Environmental Space
+    
+    # Extract environmental values at occurrence locations
+    var.occ <- terra::extract(Rastack, Occu_r[, c("x", "y")])
+    # var.occ <- var.occ[complete.cases(var.occ), ]
+    
+    # Map occurrences to environmental intervals based on initial variable ranges
+    # In which grid cells do the occurrences fall based on the initial intervals provided?
+    # Where do the occurrences position themselves within the defined environmental space?
+    env.itvl <- sapply(colnames(var.occ[,-1]), function(x, combs, seqs.)
+      cut(combs[, x], breaks = seqs.[[x]], include.lowest = TRUE, right = FALSE),
+      combs = var.occ[,-1], seqs. = intervals)
+    
+    duplicated.cells.itv <- which(duplicated(env.itvl)) # Identify duplicated environmental conditions
+    
+    message("\n\n ---- ", Sp, " ----\n",
+            "Total number of occurrences with environmental conditions in the geographical space: ", 
+            nrow(env.itvl),
+            "\nNumber of duplicated conditions: ", 
+            length(duplicated.cells.itv),
+            "\nNumber of unique occurrences (environmental space): ",
+            nrow(env.itvl[-duplicated.cells.itv, ]),
+            "\n\nTotal number of presences (raw): ",
+            nrow(Occu),
+            "\n\nTotal number of presences (rasterized): ",
+            length(which(Occu_r$Observed == 1)),
+            "\nNumber of duplicated presences: ", 
+            length(which(Occu_r$Observed[duplicated.cells.itv] == 1)),
+            "\nNumber of unique presences: ",
+            length(which(Occu_r$Observed[-duplicated.cells.itv] == 1)),
+            "\n\nTotal number of absences: ",
+            length(which(Occu_r$Observed == 0)),
+            "\nNumber of duplicated absences: ", 
+            length(which(Occu_r$Observed[duplicated.cells.itv] == 0)),
+            "\nNumber of unique absences: ",
+            length(which(Occu_r$Observed[-duplicated.cells.itv] == 0)))
+    
+    # Filter out duplicated occurrences if any
+    if(length(duplicated.cells.itv) > 0){
+      Occu_2 <- Occu_r[-duplicated.cells.itv, ] ## Remove duplicated occurrences
+      env.itvl_2 <- env.itvl[-duplicated.cells.itv, ] ## new environmental interval without duplicated ones
+      var.occ_2 <- var.occ[-duplicated.cells.itv, ]
+    } else {
+      Occu_2 <- Occu_r
+      env.itvl_2 <- env.itvl
+      var.occ_2 <- var.occ
+    } 
+    
+    ############# 3. Convex Hull
+    
+    ### 3.1 Convex Hull preparation
+    # Replace interval values by their mid points.
+    cur.sp.pixels <- sapply(colnames(env.itvl_2), function(x, int.to.replace, replacing.values){
+      replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
+    }, int.to.replace = env.itvl_2, replacing.values = envir.space$detailed.intervals) ### valeurs variables correspondant aux occurences uniques
+    
+    # Remove occurrences outliers for the convex hull calculations (2,5% high and 2,5% low extreme)
+    convex.hull.interval = 0.05 
+    # Select for each variable 2.5% of the lower extreme and 2.5% of the higher extreme
+    outs <- lapply(colnames(var.occ_2), function(x, df)
+    {
+      qt <- quantile(df[, x], probs = c(0 + convex.hull.interval / 2,
+                                        1 - convex.hull.interval / 2))
+      return(which(df[, x] <= qt[1] | df[, x] >= qt[2]))
+    }, df = var.occ_2)
+    
+    outs <- unique(unlist(outs))
+    # Remove occurrences outliers from midpoint dataframe
+    cur.sp.pixels.filt <- cur.sp.pixels[-outs,]
+    
+    ### 3.2 Convex Hull creation
+    
+    if(nrow(cur.sp.pixels.filt) >= 6){  # If there is enough points we use occurrence without outliers
+      # else we use all occurrences
+      cursp.convhull <- geometry::convhulln(cur.sp.pixels.filt,
+                                            # options = "Qt"
+      ) 
+    }else{
+      cursp.convhull <- convhulln(cur.sp.pixels[Occu_2$Observed == 1, ]) 
+    }
+    
+    # Checking environmental conditions that are inside the convex hull vs. outside
+    cursp.inhull <- geometry::inhulln(cursp.convhull, 
+                                      as.matrix(envir.space$unique.conditions.in.env))
+    
+    
+    # Save ConvexHull
+    saveRDS(cursp.inhull, paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
+    
+    ## ConvexHull data Visualisation
+    # plot(Rastack[[1]])
+    # convhull_coord_values <- envir.space$coords[cursp.inhull,]
+    # convhull_coord_values <- as.data.frame(convhull_coord_values)
+    # points(convhull_coord_values$x, convhull_coord_values$y, pch = 20, col = "blue", cex = 0.2) ## convex_hull
+    
+    # Check where species occurences are located into the environmental space (using midpoints variable values)
+    presencepixels <- apply(envir.space$unique.conditions.in.env, 1, paste, collapse = " ")   %in% 
+      ## For each row, the env values are concatenated into a single string with spaces between them.
+      # check if elements of one vector are present in another. 
+      apply(cur.sp.pixels, 1, paste, collapse = " ")
+    #It returns a logical vector (TRUE or FALSE), indicating whether each element in the first vector is found in the second vector
+    
+    # Save ConvexHull
+    saveRDS(presencepixels, paste0("data/convexhull/", Sp, "_presencepixels.rds"))
+    
+    # Final dataframe of occurences and their respective variable values
+    Fin_occ_var <- cbind(Occu_2, var.occ_2)
+    Fin_occ_var <- Fin_occ_var %>%
+      dplyr::select(-ID)
+    
+    # Save occurrences to an Excel file
+    if(!dir.exists("data/filtered_occurences")) {
+      dir.create("data/filtered_occurences,")
+    }
+    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"), row.names = F)
+    
+    ```
+
+## Visualisation des données d'occurences aux variables climatiques
+
+    ```{r}
+ ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
+    
+    ############# 4. Data visualization
+    ## 4.1 Environmental range
+    
+    # Reshape the data into long format for ggplot
+    var.occ_2_long <- var.occ_2[, -1] %>%
+      tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Values")
+    
+    # Create a list to store each ggplot
+    plot_list <- list()
+    # Define a list of colors for each variable
+    colors <- c("bio5" = "brown",   
+                "hurs_min" = "#2BDBCA", 
+                "npp" = "green4")  
+     
+    # Loop over each environmental variable and create a boxplot for each
+    for (var in unique(var.occ_2_long$Variable)) {
+      plot_obj <- ggplot(var.occ_2_long[var.occ_2_long$Variable == var, ], aes(x = Variable, y = Values)) +
+        geom_boxplot(fill = colors[var], color = "black", outlier.shape = 16) +
+        labs(x = NULL, y = NULL, title = var) +
+        theme_minimal() +
+        theme(axis.text.x = element_blank(),  # Remove x-axis labels for individual plots
+              axis.title.x = element_blank(),
+              axis.text.y = element_text(size = 10),  # Adjust size of y-axis labels
+              axis.title.y = element_text(size = 12)) +
+        scale_color_manual(values = colors)   +    # Use colors as specified
+        guides(color = "none")  # Remove the color legend
+      # Add the plot to the list
+      plot_list[[var]] <- plot_obj
+    }
+    # 
+    # Arrange all the plots in a grid
+    all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
+                              top = Sp)
+    
+    plot(all_plots)
+    
+    # # Save the grid to a PNG file
+    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    # 
+    ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
+    
+    } else {
+      # Stop the script if the number of rows in Occu is not greater than 60
+      stop("The number of occurrences is less than or equal to 60. Exiting the script.")
+    }
+}
+```
+
+# Création des pseudo-absences
+
+1. Egalisation du nombre de pseudo-absences et de présences.
+
+2 Sélection aléatoire des pseudo-absences en respectant les conditions suivantes :
+- Elles doivent se situer en dehors du convex hull initialement défini.
+- Elles ne doivent pas correspondre aux mêmes pixels que les occurrences de l’espèce situées en dehors du convex hull, c’est-à-dire les 5 % des valeurs les plus extrêmes des variables environnementales.
+
+On effectue 5 run de pseudoabsences ce qui donne au total un nombre de pseudo absences 5 fois plus élevé que le nombre de présence.
+
+```{r}
+# Loop over each species to process occurrence data
+ for (i in 1:length(Vect_Sp)) {
+  Sp <- Vect_Sp[[i]] # Current species name
+  
+  # Occurrence and environmental values for the species
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
+  
+  # Convex hull and presence pixels data
+  cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
+  presencepixels <- readRDS(paste0("data/convexhull/", Sp, "_presencepixels.rds"))
+  
+  # Set the number of presence-absence (PA) points and the number of random runs for PA sampling
+  number.PA <- nrow(Fin_occ_var) # Number of presence points = Number of pseudo absence points
+  runs.PA <-5 # Number of random runs for pseudo-absence sampling
+  
+  # Prepare environmental data for the species 
+  cursp.rundata <- Fin_occ_var[,-c(1:2)] # Environmental conditions
+  
+  # XY coordinates of the species' presence points
+  cursp.xy <- Fin_occ_var[, c("x", "y")] 
+  
+  # Table for storing the pseudo-absence data 
+  pseudoabs.biomod.table <- matrix(FALSE,
+                                   nrow = nrow(Fin_occ_var) + runs.PA * number.PA,,
+                                   ncol = runs.PA) 
+  colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA) # Column names for each PA run
+  pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE # Set the presence points to TRUE
+  
+  pseudo_only <- data.frame()
+  # Loop to sample pseudo-absence points for each run (outside the convex hull and presence pixels)
+   for(PA in 1:runs.PA){
+    
+     # # Sample pseudo-absence points outside the convex hull
+     cursp.pseudoabs <- sample(which(!cursp.inhull & !presencepixels), 
+                               size = number.PA, # Same number as the presence points
+                               replace = FALSE) # No replacement, unique cells
+     
+     # Pseudo-absence data to the environmental data (NA as values in the "Observed" column)
+     cursp.rundata <- rbind.data.frame(
+       cursp.rundata,
+       data.frame(Observed = NA, # Observed is NA for pseudo-absence points
+                  envir.space$unique.conditions.in.env[cursp.pseudoabs, ])) # Environmental conditions for pseudo-absences
+     
+     pseudo_only <- rbind(pseudo_only,envir.space$coords[cursp.pseudoabs, ])
+     # Append the coordinates of pseudo-absence points to the coordinate data
+     cursp.xy <- rbind(cursp.xy,envir.space$coords[cursp.pseudoabs, ])
+     
+     # Update the pseudo-absence table for the current run (mark rows as TRUE for pseudo-absence points)
+     pseudoabs.biomod.table[(nrow(Fin_occ_var) + 1 + (PA - 1) * number.PA):
+                              (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
+   }
+  
+  
+  #### Pseudo absence data for visualisation 
+  pseudo_only_vis <- rasterize(as.matrix(pseudo_only), Rastack)
+  pseudo_only <- as.data.frame(pseudo_only_vis, xy=T, na.rm = FALSE)
+
+  # Combine occurrences with the baseline raster values
+  Rastab <- as.data.frame(Rastack[[1]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
+  pseudo_only <- cbind(pseudo_only,Rastab[[3]]) # Add variable values
+  pseudo_only <- pseudo_only[complete.cases(pseudo_only), ] # Remove occurrences outside land
+  pseudo_only <- pseudo_only[, -c(3,4)]
+  
+  #### Convexehull Species
+  conv_hull <- cbind(data.frame(cursp.inhull), envir.space$coords)
+  conv_hull_filtered <- conv_hull[conv_hull$cursp.inhull != FALSE, ]
+    
+  ### Visualisation data
+  plot(Rastack[[1]])
+  points(conv_hull_filtered[ , c("x", "y")], pch = 20, cex = 0.5, col = "blue")
+  points(pseudo_only[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
+  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
+  
+  
+  # Create the output directory for models if it doesn't exist
+  save_dir <- paste0("models/", Sp)
+  if(!dir.exists(save_dir)) {
+    dir.create(save_dir)
+  }
+  
+  # BIOMOD2 formating data
+  run_data <- BIOMOD_FormatingData(
+    resp.name = Sp, 
+    resp.var = cursp.rundata$Observed, # Observed data for the species (presence/absence values)
+    expl.var = cursp.rundata[, -1],   # Predictive variables (species-specific raster stack)
+    dir.name = save_dir,  # Directory for saving the models
+    resp.xy = cursp.xy,     # XY coordinates of the presence and pseudo-absence points
+    PA.strategy = 'user.defined',
+    PA.user.table = pseudoabs.biomod.table)
+  
+  saveRDS(run_data, file = paste0("models/", Sp, "/run_data.RDS"))
+}
+```
+
+# Validation croisée K-fold.
+
+Pour chaque run (jeu de données contenant un nombre égal de présences et de pseudo-absences) :
+- Division en 5 sous-jeux de données (plis ou folds)
+        Le jeu de données est divisé en 5 parties égales : 4 plis serviront à la calibration des algorithmes, et le pli restant sera utilisé pour leur évaluation.
+
+- Évaluation croisée des plis
+        Chaque pli servira d’évaluation une fois, tandis que les 4 autres resteront utilisés pour l'entraînement.
+        Cela garantit que chaque algorithme sera entraîné 5 fois par run.
+
+- On selectionne les algorithmes qui ont la meilleure performance (c à dire, avec un indive de Boyce > 0.7).
+
+Une fois nos algorythmes lancés et finis, on regarde les courbes de réponses de nos algorithmes pour chacune de nos variables.
+Les courbes de réponse montrent comment la probabilité de présence de l'espèce change en fonction d'une variable environnementale donnée.
+Elles permettent également de vérifier si les relations estimées par le modèle sont écologiquement plausibles et cohérentes avec les connaissances biologiques existantes (voir figure "Visualisation des données d'occurences aux variables climatiques").
+
+Enfin, on regarde l'importance des variables selon les modèles ce qui nous permet de définir quelle variable climatique influe le plus sur la présence de nos espèces selon les modèles.
+
+```{r}
+# Loop over each species to process occurrence data
+for (i in 1:length(Vect_Sp)) {
+  Sp <- Vect_Sp[[i]] # Get the current species name
+  
+  # Read model projection data for the species
+  proj_names <- readRDS(paste0("models/", Sp, "/run_data.RDS"))
+  
+  ############# 1. K-fold crossvalidation
+  
+  # Perform K-fold cross-validation with 5 folds
+  table_cv <- bm_CrossValidation(
+    bm.format = proj_names, # Model projections to validate
+    strategy = "kfold", # Cross-validation strategy
+    k = 5, # Number of folds for cross-validation
+    nb.rep = 1, # Number of repetitions
+    balance = "both") # Option to balance presence and absence data
+  
+  # Extract the calibration summary from the cross-validation results
+  calib_summary <-
+    summary(proj_names, calib.lines =  table_cv) %>%
+    filter(dataset == "calibration") # Filter calibration dataset for the cross-validation
+  
+  ############# 2. Model formating
+  
+  ### 2.1 Model preparation
+  
+  # Create empty lists to store parameter configurations for different models
+  RF_param_list <- list()
+  XGBOOST_param_list <- list()
+  # MAXNET_param_list <- list()
+  
+  # Loop over each cross-validation run to adjust model parameters
+  for (cvrun in 1:nrow(calib_summary)) {
+    prNum <- calib_summary$Presences[cvrun] # Number of presence points
+    bgNum <- calib_summary$Pseudo_Absences[cvrun] # Number of pseudo abscence points
+    
+    # Random Forest model parameters
+    RF_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
+       ntree = 2000,  # Number of trees in the forest
+       mtry = floor(sqrt(ncol(proj_names@data.env.var))), # number of variables per tree
+       sampsize = c("0" = bgNum, "1" = bgNum), # Balanced sampling of presence and background
+       replace = TRUE
+     )
+     
+    # XGBOOST model parameters
+    # Adjust weights for the XGBOOST model based on presence and background points
+    wt <- ifelse(proj_names@data.species == 1, 1, prNum / bgNum) #### toujours 1 : meme poids pour les pseudo abs que pour les presences
+    
+  XGBOOST_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
+    nrounds = 1000,  # number of iterations
+    eta = 0.1,  # learning rate
+    max_depth = 7,  # depth of trees
+    subsample = 1,  # Use 90% of the data for each tree
+    objective = "binary:logistic", # Binary logistic regression
+    gamma = 0,  # Regularization to avoid overfitting
+    colsample_bytree = 0.8,  # Fraction of features to sample per tree
+    min_child_weight = 1, # Minimum sum of instance weight
+    weight = wt, # Use calculated weights for each data point
+    verbose = 0
+  )
+  
+  # MAXNET model parameters
+  #  MAXNET_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
+  #    l1_regularizer = 0.1,  # L1 regularization to prevent overfitting
+  #    l2_regularizer = 0.1,  # L2 regularization to prevent overfitting
+  #    use_sgd = TRUE, # Use stochastic gradient descent
+  #    set_heldout = 0, # No held-out data for validation
+  #    verbose = TRUE
+  #  )
+  }
+  
+  # Define modeling options
+  model_parameters <- bm_ModelingOptions(
+    data.type = "binary", # Binary classification (presence/absence)
+    models = c('RF', 'XGBOOST','MAXNET', 'GLM', 'GBM'),  # Full list of models
+    strategy = "user.defined",
+    user.base = "default",
+    user.val = list(
+      RF.binary.randomForest.randomForest = RF_param_list,
+      XGBOOST.binary.xgboost.xgboost = XGBOOST_param_list
+      # ,
+      # MAXNET.binary.maxnet.maxnet = MAXNET_param_list
+      ), 
+    bm.format = proj_names, # Input model data
+    calib.lines = table_cv # Cross-validation table
+  ) 
+  
+  ### 2.2 Invividual models
+  
+  # Run modeling with specified parameters
+  myBiomodModelOut <- BIOMOD_Modeling(
+    proj_names,
+    modeling.id = "Modeling",
+    models = c('RF', 'XGBOOST','MAXNET', 'GLM', 'GBM'),
+    OPT.strategy = "user.defined",
+    OPT.user = model_parameters,
+    CV.strategy = 'user.defined',
+    CV.user.table = table_cv,
+    CV.do.full.models = FALSE,
+    var.import = 10, # Number of variable importance metrics to calculate
+    metric.eval = c('BOYCE'), # Evaluation metric (Boyce index)
+    do.progress = TRUE)
+  
+  # Save the modeling output
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/model_output.rds"))
+  
+  
+  ## 2.2.a Response curves
+  
+  # Load pre-trained model outputs for the species
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
+  
+  # Get the evaluation results for each model
+  evals <- get_evaluations(myBiomodModelOut)
+  
+  # Filter models with a Boyce index greater than 0.7
+  Choosen_Model <- evals %>% filter(validation > 0.7)
+  
+  # Extract the names of selected models
+  selected_models <- Choosen_Model$full.name # Get the full names of selected models
+  
+  # Save the selected models
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models.rds"))
+  
+  # Plot response curves for the selected models
+  resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
+                              models.chosen = selected_models,
+                              # show.variables = cur_vars,http://127.0.0.1:37987/graphics/plot_zoom_png?width=1029&height=809
+                              fixed.var = "mean", # Fix the variable at the mean value
+                              data_species = proj_names@data.species,
+                              do.plot = FALSE, # Do not plot here (only generate the response table)
+                              do.progress = FALSE)$tab
+  
+  colnames(resp) <- c("Index", "Variable", "Var.value", "Model", "Response")
+  
+  # Extract the model type from the 'Model' column
+  resp <- resp %>%
+    mutate(Model_Type = sub(".*_(RF|GBM|GLM|GAM|XGBOOST|MAXNET)$", "\\1", Model))
+  
+  
+  response <- ggplot(resp, aes(x = Var.value, y = Response)) + 
+    geom_line(alpha = 0.2, aes(group = Model, color = Model_Type)) +  # Use Model_Type for color
+    stat_smooth(color = "black") + #Trend line
+    facet_wrap(~Variable, scales = "free_x") + 
+    theme_bw() +  # Black-and-white theme
+    ylim(0, 1.1) + 
+    xlab("Variable value") +
+    scale_color_manual(values = c(
+      'RF' = '#26c031', 
+      'XGBOOST' = '#38599f', 
+      'MAXNET' = '#db1010', 
+      'GAM' = '#a338bb', 
+      'GLM' = '#d89533', 
+      'GBM' = '#4bb8f8')) +  # Custom color scale
+    labs(color = "Model")
+
+  response
+   
+  # Create the output directory for figures if it doesn't exist
+  save_dir <- paste0("output/Relation_Environnement")
+  if(!dir.exists(save_dir)) {
+  dir.create(save_dir)
+  }
+  
+  # Save the plot 
+  ggsave(str_c(save_dir, "/",Sp,".jpeg",sep= ""),
+         response,
+       dpi = 2000,
+       bg = NULL,
+       width = 11,
+       height = 8.5,
+       units = "in")
+  
+  
+  ## 2.2.b Variable importance
+  
+  gg_varimp <- get_variables_importance(myBiomodModelOut) # techniques de model pour le run + Va + importance calculée des VA
+  
+  
+  colnames(gg_varimp) <- c("id", 
+                           "PA.Run",
+                           "CV.Run", "Model", 
+                           "Variable", 
+                           "VI.run",
+                           "Variable.importance")
+  
+  var_imp <- ggplot(gg_varimp, aes(y = Variable, x = Variable.importance)) + # ordonne le graph en fonction de celle 
+    #qui a la plus forte mediane : utilise les niveaux de facteur 
+    geom_boxplot() + 
+    theme_bw() +
+    ggtitle(Sp) + 
+    scale_color_manual(values = c(
+      'RF' = '#26c031', 
+      'XGBOOST' = '#38599f', 
+      'MAXNET' = '#db1010', 
+      'GAM' = '#a338bb', 
+      'GLM' = '#d89533', 
+      'GBM' = '#4bb8f8')) +  # Custom color scale
+    geom_jitter (alpha = 0.2, aes(col = Model))
+  
+  var_imp
+  
+  # Create the output directory for figures if it doesn't exist
+  save_dir <- paste0("output/Variable_Importance")
+  if(!dir.exists(save_dir)) {
+    dir.create(save_dir)
+  }
+  
+  # Save the plot 
+  ggsave(str_c(save_dir, "/",Sp,".jpeg",sep=""),
+         var_imp,
+         dpi = 2000,
+         bg = NULL,
+         width = 11,
+         height = 8.5,
+         units = "in")
+  
+}
+```
+
+# Projection des modèles sur les cartes
+
+La calibration des modèles préalables est désormais prête à être projetée sur les conditions environnementales à l'échelle mondiale.
+Chaque modèle va prédire, pour chaque pixel représentant une combinaison spécifique de variables environnementales, la probabilité que l’espèce ait une forte chance de s’établir. Une fois ces prédictions effectuées, les résultats de l'ensemble des modèles sont combinés pour former un modèle d’ensemble. 
+Ce dernier est ensuite projeté sous forme de carte, permettant une visualisation globale de la distribution potentielle de l’espèce.
+
+Pour visualiser les différences d’estimation entre les modèles, une carte représentant les écarts-types des prédictions peut également être générée. Cette carte met en évidence les zones où les modèles s'accordent ou divergent quant à la probabilité d’occurrence de l’espèce, offrant ainsi une meilleure compréhension des incertitudes associées aux projections.
+
+```{r}
+for (i in 1:7) {
+  Sp <- Vect_Sp[[i]] # Get the current species name.
+  
+  # Load pre-trained model outputs for the species
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
+  selected_models <- readRDS(paste0("models/", Sp, "/selected_models.RDS"))
+
+  ############# 1. Projection of Models
+  
+  ### 1.1 Individual models
+  proj_runs <- BIOMOD_Projection(
+  bm.mod = myBiomodModelOut, # Input individual model.
+  proj.name = paste0(Sp,"_Projection"), # Name for the projection.
+  new.env = Rastack, # Environmental data for projection.
+  models.chosen = selected_models,# Only use selected models.
+  build.clamping.mask = TRUE,
+  output.format = ".tif")
+  
+  ############# 2. Suitability raster
+  
+  # Load suitability projection raster
+  Projection_raw <- rast(paste0("models","/",Sp,"/",gsub(" ",".",Sp),
+                                "/proj_",Sp,"_Projection",
+                                "/proj_",Sp,"_Projection_",gsub(" ",".",Sp),".tif"))
+  
+  # Ensure no negative values in the raster
+  Projection_raw <- app(Projection_raw, function(x) {
+    x[x < 0] <- 0 # Replace negative values with 0.
+    return(x)
+  })
+  
+  ### 2.1 Projection Mean : Ensemble model
+  
+  Projection_ens <- mean(Projection_raw) # Calculate mean suitability across layers : Ensemble model
+  names(Projection_ens) <- c("Suitability")
+
+  # Plotting suitability
+  
+  # Convert raster to data frame for plotting
+  raster_df <- as.data.frame(Projection_ens, xy = TRUE)
+  
+  ## Save drataframe
+  
+  # Create species-specific directories
+  save_dir <- paste0("output/", "Suitability")
+  if (!dir.exists(save_dir)) {
+    dir.create(save_dir)
+  }
+  
+  # Save the selected models
+  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod.rds"))
+  
+  ## Plot suitability raster
+  
+  # Occurrence of the species to get coordinates
+  
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
+  
+  # Map
+  plot_raster <- ggplot() +
+    geom_tile(data = raster_df, aes(x = x, y = y, fill = Suitability)) +
+    scale_fill_viridis(name = "Suitability", option = "D", direction = 1) +  
+    coord_equal() +  # Keep proportions
+    theme_minimal() +  
+    labs(title = "Suitability Raster",
+         subtitle = Sp
+    ) +
+    geom_point(data =  Fin_occ_var,
+               aes(x = x, y = y),
+               colour = "brown",
+               size = 0.5) +
+    theme(
+      plot.title = element_text(size = 18, face = "bold"),
+      plot.subtitle = element_text(size = 14, face = "italic"),
+      axis.title = element_blank(),
+      axis.text = element_text(color = "gray50"),
+      legend.position = "right",
+      legend.key.height = unit(1, "cm"))
+
+  # Create output directory for figures if it doesn't exist
+  Save_dir_fig <- "figures"
+  if (!dir.exists(Save_dir_fig)) {
+    dir.create(Save_dir_fig)
+  }
+  
+  # Create species-specific directories
+  save_dir <- paste0("figures/", Sp)
+  if (!dir.exists(save_dir)) {
+    dir.create(save_dir)
+  }
+  
+  # Save the plot
+  ggsave(
+    str_c("figures/", Sp,"/Plot_Raster.jpeg",sep=""),
+    plot_raster ,
+    dpi = 500,
+    bg = NULL,
+    width = 15,
+    height = 8.5,
+    units = "in"
+  )
+  
+  ############# 3. Standard Deviation Raster
+ 
+    Projection_sd <- app(Projection_raw, sd) # Calculate standard deviation across layers.
+    names(Projection_sd) <- c("Standard_deviation")
+    
+    # Convert standard deviation raster to data frame for plotting
+    raster_sd_df <- as.data.frame(Projection_sd, xy = TRUE)
+    
+    # Save the selected models
+    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod.rds"))
+    
+    # Plot standard deviation raster
+    plot_raster_sd <- ggplot() +
+  geom_tile(data = raster_sd_df, aes(x = x, y = y, fill = Standard_deviation)) +
+  scale_fill_viridis(name = "Standard deviation", option = "inferno", direction = 1) +  
+  coord_equal() +  # Pour garder les proportions
+  theme_minimal() +  # Un thème propre
+  labs(title = "Standard deviation Raster",
+       subtitle = Sp,
+       # caption = "Made with ggplot2"
+       ) +
+      theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    plot.subtitle = element_text(size = 14, face = "italic"),
+    axis.title = element_blank(),
+    axis.text = element_text(color = "gray50"),
+    legend.position = "right",
+    legend.key.height = unit(1, "cm"))
+
+    # Save the standard deviation plot
+    ggsave(
+      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_80itv_6var.jpeg",sep=""),
+      plot_raster_sd ,
+      dpi = 500,
+      bg = NULL, 
+      width = 15,
+      height = 8.5,
+      units = "in"
+    )
+}
+```
+
+   
