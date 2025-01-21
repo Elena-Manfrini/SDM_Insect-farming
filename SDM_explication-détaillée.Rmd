@@ -1102,7 +1102,7 @@ for (i in 1:7) {
     height = 8.5,
     units = "in"
   )
-  
+   #
   ############# 3. Standard Deviation Raster
  
     Projection_sd <- app(Projection_raw, sd) # Calculate standard deviation across layers.
