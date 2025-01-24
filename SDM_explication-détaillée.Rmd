@@ -2,7 +2,10 @@
 title: "Modélisation des habitats potentiels des insectes massivement élevés"
 author: "Eléna Manfrini"
 date: "2025-01-21"
-output: word_document
+output: 
+word_document : 
+toc: true
+    toc_depth: 4
 
 knitr:
   opts_chunk: 
@@ -52,7 +55,7 @@ vars <- c(paste0("bio", 1:11),  # Bioclimatic variables
 vars <- data.frame(vars = vars) # Convert the variable names into a dataframe
 vars$vars <- paste0("CHELSA_", vars$vars) # Prefix variables with "CHELSA_"
 
-# 1.1.2  Download CHELSA data
+# 1.1  Download CHELSA data
 
 for(i in 1:nrow(vars)) {
   bioclim <- vars[i,]
@@ -65,12 +68,11 @@ for(i in 1:nrow(vars)) {
                 mode = "wb",
                 quiet = TRUE)
 }
-
 ```
 
 
 
-### Socio économiques.
+### Socio-économiques.
 
 #### Terres cultivées (Cao et al., 2021)
 
@@ -94,7 +96,7 @@ vars <- rbind(vars,cropland) # Add cropland variable to the previous variable li
 
 ```{r echo = TRUE, message = FALSE, warning = FALSE}
 
-#### 1.2 Human population density from Gao et al., 2020
+#### 1.3 Human population density from Gao et al., 2020
 # We used cropland data from Gao et al., 2020 (https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-pd-sspbsyr-1km-1.01)
 # Download popdynamics-1-km-downscaled-pop-base-year-projection-ssp-2000-2100-rev01-proj-ssp1-geotiff.zip and add it on "./data/donnees_brutes/bioclim" folder.
 
@@ -110,16 +112,16 @@ xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an E
 
 Les espèces que nous allons modéliser sont :
 
-- La mouche soldat noire (Hermetia illucens)
-- Le ténébrion meunier (Tenebrio molitor)
-- Le cricket domestique (Acheta domesticus)
-- Le petit ténébrion mat (Alphitobius diaperinus)
-- La mouche domestique (Musca domestica)
-- Le grillon replel (Gryllodes sigillatus
-- Le cricket migrateur (Locusta migratoria)
-- Le grillon des steppes (Gryllus assimilis)
+- La mouche soldat noire (*Hermetia illucens*)
+- Le ténébrion meunier (*Tenebrio molitor*)
+- Le cricket domestique (*Acheta domesticus*)
+- Le petit ténébrion mat (*Alphitobius diaperinus*)
+- La mouche domestique (*Musca domestica*)
+- Le grillon replel (*Gryllodes sigillatus*)
+- Le cricket migrateur (*Locusta migratoria*)
+- Le grillon des steppes (*Gryllus assimilis*)
 
-Les données d'occurences recensées entre 1980 et 2024 sont téléchargées 
+Les données d'occurences recensées entre 1980 et 2024 sont téléchargées. 
 
 ```{r echo = TRUE, message = FALSE, warning = FALSE}
 Vect_Sp <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
@@ -185,10 +187,11 @@ for (i in 1:length(Vect_Sp)){
 ```
 
 # Selection des variables
+
 ## Rasteurisation des variables
 
 ```{r echo = TRUE, message = FALSE, warning = FALSE}
-### 1.a Bioclimatic variables
+### 2.a Bioclimatic variables
 
 Vect_Vars <- vars$vars
 
@@ -205,7 +208,7 @@ for (i in 1:length(Vect_Vars)) {
   raster_list[[Name_Var]] <- raster
 }
 
-### 1.a Human pop density
+### 2.b Human pop density
 # # Upload Human pop density
 Human_pop_2000 <- rast("data/raw/bioclim/Human_pop/baseYr_total_2000.tif")
 Human_pop_2000 <- aggregate(Human_pop_2000, fact = 15, fun="mean")
@@ -214,7 +217,7 @@ Human_pop_2000 <- resample(Human_pop_2000,
 raster_list[["Human_pop_2000"]] <- Human_pop_2000
 
 
-### 1.b Cropland
+### 2.c Cropland
 
 cropland <- rast("data/raw/bioclim/globalCropland_2010CE.tif")
 cropland <- aggregate(cropland, fact = 15, fun="mean")
@@ -329,7 +332,7 @@ Les lignes présentant des combinaisons identiques de valeurs pour les variables
 4. Calcul de la médiane des intervalles:
 Pour chaque cellule correspondant à un intervalle donné, la médiane des valeurs de cet intervalle est calculée, puis utilisée comme valeur représentative pour les variables.
 
-```{r}
+```{r message = TRUE, warning = FALSE}
 ###################### Define computeEnvCombinations function ######################
 computeEnvCombinations <- function(env.stack,
                                    var.intervals,
@@ -460,8 +463,8 @@ baseline_raster <- as(Rastack, "Raster")
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   Occu <- read.xlsx(paste0("data/raw/occurences/Occurences_", Sp, ".xlsx")) # Load occurrences for this species
-  ############# 2. Occurrences filtering
-    ### 2.1 Remove occurrences outside land
+  ############# 4.1 Occurrences filtering
+    ### 4.1.a Remove occurrences outside land
     
     # Proceed only if there are more than 10 occurrences per environmental variable
     if (length(Occu$x) > 60){
@@ -477,7 +480,7 @@ for (i in 1:length(Vect_Sp)) {
     Occu_r[3] <- 1 # Assign presence = 1 for each occurrence
     colnames(Occu_r) <- c("x","y","Observed") # Rename columns
     
-    ### 2.2 Remove duplicated occurrences in Environmental Space
+    ### 4.1.b Remove duplicated occurrences in Environmental Space
     
     # Extract environmental values at occurrence locations
     var.occ <- terra::extract(Rastack, Occu_r[, c("x", "y")])
@@ -525,9 +528,9 @@ for (i in 1:length(Vect_Sp)) {
       var.occ_2 <- var.occ
     } 
     
-    ############# 3. Convex Hull
+    ############# 4.2 Convex Hull
     
-    ### 3.1 Convex Hull preparation
+    ### 4.2.a Convex Hull preparation
     # Replace interval values by their mid points.
     cur.sp.pixels <- sapply(colnames(env.itvl_2), function(x, int.to.replace, replacing.values){
       replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
@@ -547,7 +550,7 @@ for (i in 1:length(Vect_Sp)) {
     # Remove occurrences outliers from midpoint dataframe
     cur.sp.pixels.filt <- cur.sp.pixels[-outs,]
     
-    ### 3.2 Convex Hull creation
+    ### 4.2.b Convex Hull creation
     
     if(nrow(cur.sp.pixels.filt) >= 6){  # If there is enough points we use occurrence without outliers
       # else we use all occurrences
@@ -600,8 +603,7 @@ for (i in 1:length(Vect_Sp)) {
     ```{r}
  ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
-    ############# 4. Data visualization
-    ## 4.1 Environmental range
+    ############# 5. Data visualization
     
     # Reshape the data into long format for ggplot
     var.occ_2_long <- var.occ_2[, -1] %>%
@@ -658,7 +660,7 @@ for (i in 1:length(Vect_Sp)) {
 
 On effectue 5 run de pseudoabsences ce qui donne au total un nombre de pseudo absences 5 fois plus élevé que le nombre de présence.
 
-```{r}
+```{r message = FALSE}
 # Loop over each species to process occurrence data
  for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
@@ -1008,9 +1010,9 @@ for (i in 1:7) {
   myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
   selected_models <- readRDS(paste0("models/", Sp, "/selected_models.RDS"))
 
-  ############# 1. Projection of Models
+  ############# 7.1 Projection of Models
   
-  ### 1.1 Individual models
+  ### Individual models
   proj_runs <- BIOMOD_Projection(
   bm.mod = myBiomodModelOut, # Input individual model.
   proj.name = paste0(Sp,"_Projection"), # Name for the projection.
@@ -1019,7 +1021,7 @@ for (i in 1:7) {
   build.clamping.mask = TRUE,
   output.format = ".tif")
   
-  ############# 2. Suitability raster
+  ############# 7.2 Suitability raster
   
   # Load suitability projection raster
   Projection_raw <- rast(paste0("models","/",Sp,"/",gsub(" ",".",Sp),
@@ -1032,7 +1034,7 @@ for (i in 1:7) {
     return(x)
   })
   
-  ### 2.1 Projection Mean : Ensemble model
+  ### 7.2 Projection Mean : Ensemble model
   
   Projection_ens <- mean(Projection_raw) # Calculate mean suitability across layers : Ensemble model
   names(Projection_ens) <- c("Suitability")
@@ -1103,7 +1105,7 @@ for (i in 1:7) {
     units = "in"
   )
    #
-  ############# 3. Standard Deviation Raster
+  ############# 7.3 Standard Deviation Raster
  
     Projection_sd <- app(Projection_raw, sd) # Calculate standard deviation across layers.
     names(Projection_sd) <- c("Standard_deviation")

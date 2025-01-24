@@ -40,7 +40,16 @@ Human_pop_2000 <- rast("data/raw/bioclim/Human_pop/baseYr_total_2000.tif")
 Human_pop_2000 <- aggregate(Human_pop_2000, fact = 5, fun="mean")
 Human_pop_2000 <- resample(Human_pop_2000,
                           raster_list[["CHELSA_npp"]])
-raster_list[["Human_pop_2000"]] <- Human_pop_2000
+
+# log 
+Human_pop_2000_log <- log(Human_pop_2000 + 1)
+
+# Normalize
+minmax <- minmax(Human_pop_2000)
+# Normalize the raster
+Human_pop_2000_normalized <- (Human_pop_2000 - minmax[1,]) / (minmax[2,] - minmax[1,])
+
+raster_list[["Human_pop_2000"]] <- Human_pop_2000_log
 
 
 ### 1.b Cropland
@@ -89,18 +98,17 @@ writeRaster(Rastack, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE
 
 ############# 3. Check collineratity
 
-
-# Load Raster
 Rastack <- rast("data/raw/bioclim/baseline.tif")
+
 
 ### 3.a Correlation tree
 #Create a PNG to store the output image of the collinearity tree
-png("./output/collinearity_groups.png")
+png("./output/collinearity_groups_humanlog.png")
 
 # Remove highly collinear variables by grouping them using a correlation threshold
 groups <- removeCollinearity(Rastack, plot = T,
                              # This tests for collinearity and groups variables that are inter-collinear
-                             multicollinearity.cutoff = 0.7, # Cutoff threshold
+                             multicollinearity.cutoff = 0.5, # Cutoff threshold
                              # sample.points = TRUE,
                              # nb.points = 50000,
                              method = "spearman") # Spearman correlation used due to possible non-normal variable distribution
@@ -126,7 +134,7 @@ dev.off()
 
 
 # Stack the definitive environmental variables into a single raster object
-Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min", "CHELSA_npp")]]
+Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min", "CHELSA_npp", "globalCropland_2010CE")]]
 
 names(Rastack_fin) <- gsub("CHELSA_", 
                            "",

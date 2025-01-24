@@ -1,6 +1,6 @@
 library(terra)
 library(openxlsx)
-library(xgboost)
+library(randomForest)
 library(caret)
 library(pROC)
 
@@ -14,17 +14,12 @@ Rastack <- rast("data/final_baseline.tif")
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
-# Data frame to store AUC results for overfitting analysis
-overfitting_results <- data.frame(
-  species = character(),
-  dataset = character(),
-  auc = numeric(),
-  stringsAsFactors = FALSE
-)
-
 best_model <- data.frame()
 
 i <-  1
+# Create an empty list to store the rasters for each variable
+species.estimation <- list()
+
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
@@ -78,97 +73,59 @@ for (i in 1:length(Vect_Sp)) {
                              (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
     
   }
-    
+  
   cursp.rundata$Observed[is.na(cursp.rundata$Observed)] <- 0
   cursp.rundata$Observed <- as.character(cursp.rundata$Observed)
-    
+  
   calibration <- sample(nrow(cursp.rundata), 0.7 * nrow(cursp.rundata))
+  
+  train <- cursp.rundata[calibration, ]
+  train$Observed <- as.factor(train$Observed)
+  
+  test <- cursp.rundata[-calibration, ]
+  test$Observed <- as.factor(test$Observed)
+  
+  print(paste("Training set size:", dim(train)[1]))
+  print(paste("Test set size:", dim(test)[1]))
+ 
+    trees <- c(500, 1000, 2000, 3000)
+    mtry <- c(1,2)
     
-    train <- cursp.rundata[calibration, ]
-    test <- cursp.rundata[-calibration, ]
+    # Create an empty list to store performance for each combination of trees and mtry
+    true.estimation <- list()
     
-    print(paste("Training set size:", dim(train)[1]))
-    print(paste("Test set size:", dim(test)[1]))
-    
-    
-    dtrain <- xgb.DMatrix(data = as.matrix(train[,-1]), label = train$Observed)
-    dtest <- xgb.DMatrix(data = as.matrix(test[,-1]), label = test$Observed)
-    
-    # Define parameter grid for tuning
-    param_grid <- expand.grid(
-      nrounds = c(4, 500, 1000),     # Number of boosting rounds
-      max_depth = c(1, 2, 3, 4),                  # Maximum depth of a tree
-      eta = c(1, 0.1, 0.01),               # Learning rate
-      gamma = c(0, 1, 5)#,                      # Minimum loss reduction to make a split : 
-      # colsample_bytree = 0.8,       # Subsampling ratio of columns
-      # min_child_weight = 1,          # Minimum sum of instance weight needed in a child
-      # subsample = 1
-    )
-    
-    best_auc <- 0
-    best_params <- list()
-    
-    # Hyperparameter tuning using grid search
-    for (j in 1:nrow(param_grid)) {
-      params <- list(
-        objective = "binary:logistic",
-        eval_metric = "auc",
-        nrounds = param_grid$nrounds[j],
-        max_depth = param_grid$max_depth[j],
-        eta = param_grid$eta[j],
-        gamma = param_grid$gamma[j]#,
-        # colsample_bytree = param_grid$colsample_bytree[j],
-        # min_child_weight = param_grid$min_child_weight[j],
-        # subsample = param_grid$subsample[j]
-      )
-    
-      # Cross-validation for AUC
-      cv_results <- xgb.cv(
-        params = params,
-        nrounds = param_grid$nrounds[j],
-        data = dtrain,
-        nfold = 5,
-        stratified = TRUE,
-        verbose = FALSE,
-        early_stopping_rounds = 10
-      )
+    # Loop over trees and mtry values
+    for (j in 1:length(trees)) {
+      ntree <- trees[j]
       
-      mean_auc <- max(cv_results$evaluation_log$test_auc_mean)
-      if (mean_auc > best_auc) {
-        best_auc <- mean_auc
-        best_params <- params
+      for (k in 1:length(mtry)) {
+        nmtry <- mtry[k]
+        
+        # Train Random Forest model
+        rf_model <- randomForest(
+          Observed ~ .,  # Predict 'Observed' based on other variables
+          data = train,   # Training dataset
+          importance = TRUE,   # Compute variable importance
+          mtry = nmtry,    # Number of variables to try at each split
+          ntree = ntree    # Number of trees
+        )
+        
+        # Make predictions on the test data
+        pred <- predict(rf_model, test)
+        
+        # Combine actual and predicted values
+        class_rf <- as.data.frame(cbind(test$Observed, pred))
+        colnames(class_rf)[1] <- "actual_values"
+        colnames(class_rf)[2] <- "predicted_values"
+        
+        # Calculate the accuracy for this combination of ntree and mtry
+        accuracy <- (nrow(subset(class_rf, actual_values == 2 & predicted_values == 2)) + 
+                       nrow(subset(class_rf, actual_values == 1 & predicted_values == 1))) / 
+          nrow(class_rf) * 100
+        
+        # Store the result with a unique key combining ntree and mtry
+        true.estimation[[paste("ntree_", ntree, "_mtry_", nmtry, sep = "")]] <- accuracy
       }
     }
-    
-    # Train the final model with the best parameters
-    final_model <- xgb.cv(
-      params = best_params,
-      data = dtrain,
-      nrounds = best_params$nrounds,
-      nfold = 5,
-      stratified = TRUE,
-      verbose = FALSE,
-      early_stopping_rounds = 10,
-      maximize = TRUE
-    )
+    species.estimation[[Sp]] <- true.estimation
 }
-
-# Create a new column to distinguish train vs test AUC
-final_model$evaluation_log <- final_model$evaluation_log %>%
-  mutate(AUC_type = ifelse(!is.na(train_auc_mean), "train", "test"))
-
-# Plotting
-ggplot(final_model$evaluation_log, aes(x = iter)) +
-  # Plot for train_auc_mean
-  geom_point(aes(y = train_auc_mean, color = "train"), size = 1) +
-  # Plot for test_auc_mean
-  geom_point(aes(y = test_auc_mean, color = "test"), size = 1) +
-  labs(
-    title = "Train AUC Mean and Test AUC Mean Across Iterations",
-    x = "Iteration",
-    y = "AUC",
-    color = "AUC Type"
-  ) +
-  scale_color_manual(values = c("train" = "blue", "test" = "red")) + # Color by AUC type
-  theme_minimal() +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1))

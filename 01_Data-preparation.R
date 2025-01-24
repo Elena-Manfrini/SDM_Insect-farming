@@ -5,6 +5,8 @@ library(terra)
 library(sf)
 library(rnaturalearth)
 library(rgbif)
+library(openxlsx)
+
 
 ############# 1. Environmental predictors download
 
@@ -30,6 +32,7 @@ for(i in 1:nrow(vars)) {
     addresse <- paste0(
       "https://os.zhdk.cloud.switch.ch/chelsav2/GLOBAL/climatologies/1981-2010/bio/CHELSA_",
       bioclim_fin, "_1981-2010_", "V.2.1.tif")
+    options(timeout = 120)
   download.file(addresse,
                 destfile = paste0("data/raw/bioclim/", bioclim, ".tif"),
                 mode = "wb",
@@ -86,37 +89,60 @@ completed_species <- if (file.exists(log_file)) {
 
 
 for (i in 1:length(Vect_Sp)){
-  sp <- Vect_Sp[i] # Current species
+  Sp <- Vect_Sp[i] # Current species
   
   # Check if the species is already processed
   if (sp %in% completed_species) {
-    message(sprintf("Skipping %s: already completed.", sp))
+    message(sprintf("Skipping %s: already completed.", Sp))
     next
   }
   
   # Progress message
-  message(sprintf("Processing %s (%d/%d)...", sp, i, length(Vect_Sp)))
+  message(sprintf("Processing %s (%d/%d)...", Sp, i, length(Vect_Sp)))
   
   
   # Download species occurrences from GBIF
-  occurrence <- occ_search(scientificName = sp,
-                           basisOfRecord = c("HUMAN_OBSERVATION",
-                                             "MACHINE_OBSERVATION"),
+  occurrence <- occ_search(scientificName = Sp,
+                           basisOfRecord = c(
+                             # "PRESERVED_SPECIMEN",
+                           #                   "LIVING_SPECIMEN",
+                           #                   "OBSERVATION",
+                                             "HUMAN_OBSERVATION",
+                                             "MACHINE_OBSERVATION"
+                                             # "MATERIAL_SAMPLE",
+                                             # "LITERATURE",
+                                             # "MATERIAL_CITATION",
+                                             # "OCCURRENCE"
+                           ), ### remove "UNKNOWN","FOSSIL_SPECIMEN"
                            year = '1980,2024', 
                            limit = 300000,
                            fields= "minimal")
-  # Create a dataframe for species occurrences (latitude and longitude)
+  
   Occu <- data.frame(
     x = c(occurrence$HUMAN_OBSERVATION$data$decimalLongitude, 
-          occurrence$MACHINE_OBSERVATION$data$decimalLongitude),
+          occurrence$MACHINE_OBSERVATION$data$decimalLongitude
+          # ,
+          # occurrence$LIVING_SPECIMEN$data$decimalLongitude,
+          # occurrence$OBSERVATION$data$decimalLongitude,
+          # occurrence$MATERIAL_SAMPLE$data$decimalLongitude,
+          # occurrence$LITERATURE$data$decimalLongitude,
+          # occurrence$MATERIAL_CITATION$data$decimalLongitude,
+          # occurrence$OCCURRENCE$data$decimalLongitude
+          ),
     y = c(occurrence$HUMAN_OBSERVATION$data$decimalLatitude, 
-          occurrence$MACHINE_OBSERVATION$data$decimalLatitude)
-  ) %>% na.omit() # Remove rows with missing values (NA)
-  #nrow(Occu) # Number of occurrences
+          occurrence$MACHINE_OBSERVATION$data$decimalLatitude
+          # ,
+          # occurrence$LIVING_SPECIMEN$data$decimalLatitude,
+          # occurrence$OBSERVATION$data$decimalLatitude,
+          # occurrence$MATERIAL_SAMPLE$data$decimalLatitude,
+          # occurrence$LITERATURE$data$decimalLatitude,
+          # occurrence$MATERIAL_CITATION$data$decimalLatitude,
+          # occurrence$OCCURRENCE$data$decimalLatitude
+          )
+  ) %>% na.omit()
 
   # Save occurrences to an Excel file
-  output_file <- file.path(output_dir, paste0("Occurences_", sp, ".xlsx"))
-  xlsx::write.xlsx(Occu, output_file, row.names = FALSE)
+  xlsx::write.xlsx(Occu, paste0("data/raw/occurences/Occurences_Human&Machine_", Sp, ".xlsx"), row.names = FALSE)
   
   # Append the species to the completion log
   write(sp, file = log_file, append = TRUE)

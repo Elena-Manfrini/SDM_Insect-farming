@@ -20,7 +20,7 @@ i <- 1
   Sp <- Vect_Sp[[i]] # Current species name
   
   # Occurrence and environmental values for the species
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/final_Occ&Var_", Sp, ".xlsx"))
   
   # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))

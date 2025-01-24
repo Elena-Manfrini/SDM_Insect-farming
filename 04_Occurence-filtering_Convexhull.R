@@ -36,7 +36,7 @@ for (i in 1:length(Vect_Sp)) {
     Occu_r <- as.data.frame(Occu_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
     
     # Combine occurrences with the baseline raster values
-    Rastab <- as.data.frame(baseline_raster[[3]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
+    Rastab <- as.data.frame(baseline_raster[[4]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
     Occu_r <- cbind(Occu_r,Rastab[[3]]) # Add variable values
     Occu_r <- Occu_r[complete.cases(Occu_r), ] # Remove occurrences outside land
     Occu_r <- Occu_r[, -4]
@@ -47,7 +47,6 @@ for (i in 1:length(Vect_Sp)) {
     
     # Extract environmental values at occurrence locations
     var.occ <- terra::extract(Rastack, Occu_r[, c("x", "y")])
-    # var.occ <- var.occ[complete.cases(var.occ), ]
     
     # Map occurrences to environmental intervals based on initial variable ranges
     # In which grid cells do the occurrences fall based on the initial intervals provided?
@@ -157,7 +156,7 @@ for (i in 1:length(Vect_Sp)) {
     if(!dir.exists("data/filtered_occurences")) {
       dir.create("data/filtered_occurences,")
     }
-    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"), row.names = F)
+    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/final_Occ&Var_", Sp, ".xlsx"), row.names = F)
     
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
@@ -196,31 +195,31 @@ for (i in 1:length(Vect_Sp)) {
     # 
     # 
     # # b. 2D Environmental space and convexhull
-    var.occ_convhull <-  var.occ_2[-outs,]
-    env_space <- data.frame(envir.space$unique.conditions.in.env)
-    
-    ggplot() +
-      #   # Add a rectangle for the extent of the env_space dataframe
-      geom_rect(aes(xmin = min(env_space$bio5), xmax = max(env_space$bio5), 
-                    ymin = min(env_space$hurs_min), ymax = max(env_space$hurs_min)),
-                fill = "green", alpha = 0.5) +
-      # Add a rectangle for the extent of the Convex_hull dataframe
-      geom_rect(aes(xmin = min(var.occ_convhull$bio5), xmax = max(var.occ_convhull$bio5), 
-                    ymin = min(var.occ_convhull$hurs_min), ymax = max(var.occ_convhull$hurs_min)),
-                fill = "blue") +
-      # Plot the points for occurences as black dots
-      geom_point(data = var.occ_2, aes(x = bio5, y = hurs_min), color = "black", size = 0.5) +
-      # Plot points for the Convex_hull dataframe
-      geom_point(data = var.occ_convhull, aes(x = bio5, y = hurs_min), color = "red",size = 0.5) +
-      #   # Customize plot limits for better visualization
-      xlim(min(c(env_space$bio5, env_space$bio5)) - 1, 
-           max(c(env_space$bio5, env_space$bio5)) + 1) +
-      ylim(min(c(env_space$hurs_min, env_space$hurs_min)) - 1, 
-           max(c(env_space$hurs_min, env_space$hurs_min)) + 1) +
-      #   # Add labels and title
-      labs(title = "Extent Comparison Between env_space and Convex_hull",
-           x = "bio5", y = "bio7") +
-      theme_minimal()
+    # var.occ_convhull <-  var.occ_2[-outs,]
+    # env_space <- data.frame(envir.space$unique.conditions.in.env)
+    # 
+    # ggplot() +
+    #   #   # Add a rectangle for the extent of the env_space dataframe
+    #   geom_rect(aes(xmin = min(env_space$bio5), xmax = max(env_space$bio5), 
+    #                 ymin = min(env_space$hurs_min), ymax = max(env_space$hurs_min)),
+    #             fill = "green", alpha = 0.5) +
+    #   # Add a rectangle for the extent of the Convex_hull dataframe
+    #   geom_rect(aes(xmin = min(var.occ_convhull$bio5), xmax = max(var.occ_convhull$bio5), 
+    #                 ymin = min(var.occ_convhull$hurs_min), ymax = max(var.occ_convhull$hurs_min)),
+    #             fill = "blue") +
+    #   # Plot the points for occurences as black dots
+    #   geom_point(data = var.occ_2, aes(x = bio5, y = hurs_min), color = "black", size = 0.5) +
+    #   # Plot points for the Convex_hull dataframe
+    #   geom_point(data = var.occ_convhull, aes(x = bio5, y = hurs_min), color = "red",size = 0.5) +
+    #   #   # Customize plot limits for better visualization
+    #   xlim(min(c(env_space$bio5, env_space$bio5)) - 1, 
+    #        max(c(env_space$bio5, env_space$bio5)) + 1) +
+    #   ylim(min(c(env_space$hurs_min, env_space$hurs_min)) - 1, 
+    #        max(c(env_space$hurs_min, env_space$hurs_min)) + 1) +
+    #   #   # Add labels and title
+    #   labs(title = "Extent Comparison Between env_space and Convex_hull",
+    #        x = "bio5", y = "bio7") +
+    #   theme_minimal()
     # 
     ## 4.2 Environmental range
     
@@ -233,7 +232,9 @@ for (i in 1:length(Vect_Sp)) {
     # Define a list of colors for each variable
     colors <- c("bio5" = "brown",   
                 "hurs_min" = "#2BDBCA", 
-                "npp" = "green4")  
+                "npp" = "green4",
+                "Human_pop_2000" = "#8494FF",
+                "globalCropland_2010CE" = "#E68613")  
      
     # Loop over each environmental variable and create a boxplot for each
     for (var in unique(var.occ_2_long$Variable)) {
@@ -255,7 +256,7 @@ for (i in 1:length(Vect_Sp)) {
     all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
                               top = Sp)
     # # Save the grid to a PNG file
-    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, "_final.png"), plot = all_plots, width = 10, height = 8, dpi = 300)
     # 
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
