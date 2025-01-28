@@ -4,6 +4,8 @@ library(blockCV)
 library(biomod2)
 library(dplyr)
 library(tidyverse)
+library(ggplot2)
+library(stringr)
 
 library(ecospat)
 
@@ -17,7 +19,7 @@ for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Get the current species name
   
   # Read model projection data for the species
-  proj_names <- readRDS(paste0("models/", Sp, "/run_data.RDS"))
+  proj_names <- readRDS(paste0("models/", Sp, "/run_data_rdbg.RDS"))
   
   ############# 1. K-fold crossvalidation
   
@@ -127,13 +129,13 @@ for (i in 1:length(Vect_Sp)) {
   #   do.progress = TRUE)
   
   # Save the modeling output
-  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/selected_models_final_opt.rds"))
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/output_models_final_rdbg.rds"))
   
   
   ## 2.2.a Response curves
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/selected_models_final_opt.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_final_rdbg.RDS"))
   
   # Get the evaluation results for each model
   evals <- get_evaluations(myBiomodModelOut)
@@ -145,7 +147,7 @@ for (i in 1:length(Vect_Sp)) {
   selected_models <- Choosen_Model$full.name # Get the full names of selected models
   
   # Save the selected models
-  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_final_opt.rds"))
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_final_rdbg.rds"))
   
   # Plot response curves for the selected models
   resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
@@ -184,7 +186,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_final_Opt.jpeg",sep= ""),
+  ggsave(str_c(save_dir, "/",Sp,"_final_rdbg.jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,
@@ -223,7 +225,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_final_Opt.jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,"_final_rdbg.jpeg",sep=""),
          var_imp,
          dpi = 2000,
          bg = NULL,
