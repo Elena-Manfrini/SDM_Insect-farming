@@ -64,6 +64,17 @@ saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
 xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
                  row.names = FALSE)
 
+#### 1.3 Human footprint from Venter et al., 2018
+# We used humanfootprint data from Venter et al., 2018 https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-lwp3-hf-2009-2018.00#toc-product-summary)
+# Download wildareas-v3-2009-human-footprint-geotiff.zip and add it on "./data/donnees_brutes/bioclim" folder.
+
+humanfootprint <- c("humanfootprint") # Add cropland data
+vars <- rbind(vars,humanfootprint) # Add cropland variable to the previous variable list
+
+saveRDS(vars, "data/variable_names.RDS") # Save variable names as an RDS file
+xlsx::write.xlsx(vars, "data/variable_names.xlsx", # Save variable names as an Excel file
+                 row.names = FALSE)
+
 ############# 2. Species occurrences download (from GBIF)
 
 Vect_Sp <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 

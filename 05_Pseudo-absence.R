@@ -10,6 +10,8 @@ envir.space <- readRDS("data/Environmental_Space.rds")
 # Load environmental raster stack
 Rastack <- rast("data/final_baseline.tif")
 
+Rastab <- as.data.frame(Rastack, xy=T, na.rm = FALSE) # Take one layer of baseline raster
+
 # Species name
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
@@ -20,7 +22,7 @@ i <- 1
   Sp <- Vect_Sp[[i]] # Current species name
   
   # Occurrence and environmental values for the species
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/final_Occ&Var_", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
   
   # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
@@ -73,12 +75,11 @@ i <- 1
   pseudo_only <- as.data.frame(pseudo_only_vis, xy=T, na.rm = FALSE)
 
   # Combine occurrences with the baseline raster values
-  Rastab <- as.data.frame(Rastack[[1]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
-  pseudo_only <- cbind(pseudo_only,Rastab[[3]]) # Add variable values
+  pseudo_only <- cbind(pseudo_only,Rastab) # Add variable values
   pseudo_only <- pseudo_only[complete.cases(pseudo_only), ] # Remove occurrences outside land
-  pseudo_only <- pseudo_only[, -c(3,4)]
+  pseudo_only <- pseudo_only[, c("x","y")]
   
-  #### Convexehull Species
+  #### Convexhull Species
   conv_hull <- cbind(data.frame(cursp.inhull), envir.space$coords)
   conv_hull_filtered <- conv_hull[conv_hull$cursp.inhull != FALSE, ]
     

@@ -19,7 +19,7 @@ for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Get the current species name
   
   # Read model projection data for the species
-  proj_names <- readRDS(paste0("models/", Sp, "/run_data_rdbg.RDS"))
+  proj_names <- readRDS(paste0("models/", Sp, "/run_data.RDS"))
   
   ############# 1. K-fold crossvalidation
   
@@ -39,72 +39,68 @@ for (i in 1:length(Vect_Sp)) {
   ############# 2. Model formating
   
   ### 2.1 Model preparation
-  
-  # # # Create empty lists to store parameter configurations for different models
-  # XGBOOST_param_list <- list()
-  # # 
-  # # # Loop over each cross-validation run to adjust model parameters
-  # for (cvrun in 1:nrow(calib_summary)) {
-  #   prNum <- calib_summary$Presences[cvrun] # Number of presence points
-  #   bgNum <- calib_summary$Pseudo_Absences[cvrun] # Number of pseudo abscence points
-  # #   
-  # #   # Random Forest model parameters
-  # #   RF_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-  # #      ntree = 500,  # Number of trees in the forest
-  # #      mtry = floor(sqrt(ncol(proj_names@data.env.var))), # number of variables per tree
-  # #      sampsize = c("0" = bgNum, "1" = bgNum), # Balanced sampling of presence and background
-  # #      replace = TRUE
-  # #    )
-  # #    
-    # XGBOOST model parameters
-    # Adjust weights for the XGBOOST model based on presence and background points
-  #   wt <- ifelse(proj_names@data.species == 1, 1, prNum / bgNum) #### toujours 1 : meme poids pour les pseudo abs que pour les presences
-  # 
-  # XGBOOST_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-  #   nrounds = 1000,  # number of iterations
-  #   eta = 1,  # learning rate
-  #   max_depth = 3,  # depth of trees
-  #   subsample = 1,  # Use 90% of the data for each tree
-  #   objective = "binary:logistic", # Binary logistic regression
-  #   gamma = 0,  # Regularization to avoid overfitting
-  #   # colsample_bytree = 0.8,  # Fraction of features to sample per tree
-  #   # min_child_weight = 1, # Minimum sum of instance weight
-  #   weight = wt, # Use calculated weights for each data point
-  #   verbose = 0
-  # )
 
-  user.XGBOOST <- list('_allData_allRun' = list(nrounds = 500, max.depth = 4))
-  user.RF <- list('_allData_allRun' = list(ntrees = 1000, mtry = 2))
-  user.val <- list(XGBOOST.binary.xgboost.xgboost = user.XGBOOST,
-                   RF.binary.randomForest.randomForest = user.RF)
-  # 
-  # # MAXNET model parameters
-  # #  MAXNET_param_list[[paste0("_", calib_summary$PA[[cvrun]], "_", calib_summary$run[[cvrun]])]] <- list(
-  # #    l1_regularizer = 0.1,  # L1 regularization to prevent overfitting
-  # #    l2_regularizer = 0.1,  # L2 regularization to prevent overfitting
-  # #    use_sgd = TRUE, # Use stochastic gradient descent
-  # #    set_heldout = 0, # No held-out data for validation
-  # #    verbose = TRUE
-  # #  )
-  # }
-  # # 
+  # 2.1.a Tune GAM model 
+  ## Directly using biomod = too long
+  
+  # tuned.GAM <- bm_Tuning(model = 'GAM',
+  #                        tuning.fun = "gam",
+  #                        params.train = list(
+  #                          GAM.select = c(TRUE, FALSE),  # Test both with and without variable selection
+  #                          GAM.method = c("REML", "GCV.Cp") # ,  # Use REML and GCV.Cp as smoothing selection methods
+  #                          # GAM.span = c(0.3, 0.5, 0.7),  # Test different smoothing spans
+  #                          # GAM.degree = c(1, 2)  # Use polynomial degrees 1 and 2
+  #                        ),
+  #                        metric.eval = "ROC",  # Evaluate model performance with ROC
+  #                        bm.options = BIOMOD.options.default("GAM", "binary", "mgcv", "gam"),  # Define GAM modeling options
+  #                        bm.format = proj_names,  # Pass the formatted projection data
+  #                        calib.lines = table_cv  # Use the cross-validation dataset
+  #                        )
+  
+  # After tuning it on a separate Rscript (GAM_param)
+  # Define GAM model parameters
+  user.GAM <- list('_allData_allRun' = list(select = FALSE, method = "GCV.Cp", 
+                                            formula = Hermetia.illucens ~ s(bio5, k=15, sp = 0.01) + s(hurs_min, k=15, sp = 0.01) + s(npp, k=15, sp = 0.01) + s(globalCropland_2010CE,k=15, sp = 0.01)))
+  
+  # 2.1.b Tune XGBOOST model 
+  # After tuning it on a separate Rscript (XGBoost_param)
+  # user.XGBOOST <- list('_allData_allRun' = list(nrounds = 500, max.depth = 4))
+  
+  # 2.1.c Tune RF model
+  # After tuning it on a separate Rscript (XGBoost_param)
+  # user.RF <- list('_allData_allRun' = list(ntrees = 1000, mtry = 2))
+  
+  # 2.1.d Combine all tuned models
+  user.val <- list(
+    # XGBOOST.binary.xgboost.xgboost = user.XGBOOST,
+                   # RF.binary.randomForest.randomForest = user.RF,
+                   GAM.binary.mgcv.gam = user.GAM)
+
   # # # Define modeling options
   model_parameters <- bm_ModelingOptions(
     data.type = "binary", # Binary classification (presence/absence)
-    models = c('RF', 'XGBOOST','MAXNET'),  # Full list of models
+    models = c(
+      # 'RF', 'XGBOOST','MAXNET', 
+               'GAM'
+               # , 'GLM'
+               ),  # Full list of models
     strategy = "user.defined",
     user.val = user.val,
     bm.format = proj_names, # Input model data
     calib.lines = table_cv # Cross-validation table
   )
 
-  ### 2.2 Invividual models
+  ### 2.2 Invividual models with tuned and default model parameters
 
   # # # Run modeling with specified parameters
   myBiomodModelOut <- BIOMOD_Modeling(
     proj_names,
     modeling.id = "Modeling",
-    models = c('RF', 'XGBOOST','MAXNET'),
+    models = c(
+      # 'RF', 'XGBOOST','MAXNET',
+               'GAM'
+               # , 'GLM'
+               ),
     OPT.strategy = "user.defined",
     OPT.user = model_parameters,
     CV.strategy = 'user.defined',
@@ -119,7 +115,9 @@ for (i in 1:length(Vect_Sp)) {
   # myBiomodModelOut_default <- BIOMOD_Modeling(
   #   proj_names,
   #   modeling.id = "Modeling",
-  #   models = c('RF', 'XGBOOST','MAXNET'),
+  #   models = c(
+  # # 'RF', 'XGBOOST','MAXNET',
+  # 'GAM'),
   #   OPT.strategy = "default", # Try to optimize compare to default
   #   CV.strategy = 'user.defined',
   #   CV.user.table = table_cv,
@@ -129,13 +127,13 @@ for (i in 1:length(Vect_Sp)) {
   #   do.progress = TRUE)
   
   # Save the modeling output
-  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/output_models_final_rdbg.rds"))
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/output_models_GAM.rds"))
   
   
   ## 2.2.a Response curves
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_final_rdbg.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_GAM.RDS"))
   
   # Get the evaluation results for each model
   evals <- get_evaluations(myBiomodModelOut)
@@ -147,7 +145,7 @@ for (i in 1:length(Vect_Sp)) {
   selected_models <- Choosen_Model$full.name # Get the full names of selected models
   
   # Save the selected models
-  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_final_rdbg.rds"))
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_GAM.rds"))
   
   # Plot response curves for the selected models
   resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
@@ -162,7 +160,7 @@ for (i in 1:length(Vect_Sp)) {
   
   # Extract the model type from the 'Model' column
   resp <- resp %>%
-    mutate(Model_Type = sub(".*_(RF|XGBOOST|MAXNET)$", "\\1", Model))
+    mutate(Model_Type = sub(".*_(GLM|GAM|MAXNET|RF|XGBOOST|MAXNET)$", "\\1", Model))
   
   
   response <- ggplot(resp, aes(x = Var.value, y = Response)) + 
@@ -173,9 +171,12 @@ for (i in 1:length(Vect_Sp)) {
     ylim(0, 1.1) + 
     xlab("Variable value") +
     scale_color_manual(values = c(
-      'RF' = '#26c031', 
-      'XGBOOST' = '#38599f', 
-      'MAXNET' = '#db1010')) +  # Custom color scale
+      # 'RF' = '#26c031', 
+      # 'XGBOOST' = '#38599f', 
+      # 'MAXNET' = '#db1010',
+      # 'GLM' = 'lightblue',
+      'GAM' = 'red'
+      )) +  # Custom color scale
     labs(color = "Model")
 
    
@@ -186,7 +187,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_final_rdbg.jpeg",sep= ""),
+  ggsave(str_c(save_dir, "/",Sp,"_GAM.jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,
@@ -225,7 +226,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_final_rdbg.jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,"_hfp.jpeg",sep=""),
          var_imp,
          dpi = 2000,
          bg = NULL,

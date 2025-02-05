@@ -20,6 +20,7 @@ Vect_Sp <- Species$Vect_Sp
 
 # Change baseline Spat raster as raster
 baseline_raster <- as(Rastack, "Raster")
+Rastab <- as.data.frame(baseline_raster, xy=T, na.rm = FALSE) # Take one layer of baseline raster
 
 i <- 1
 # Loop over each species to process occurrence data
@@ -36,10 +37,10 @@ for (i in 1:length(Vect_Sp)) {
     Occu_r <- as.data.frame(Occu_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
     
     # Combine occurrences with the baseline raster values
-    Rastab <- as.data.frame(baseline_raster[[4]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
-    Occu_r <- cbind(Occu_r,Rastab[[3]]) # Add variable values
+    # Rastab <- as.data.frame(baseline_raster[[4]], xy=T, na.rm = FALSE) # Take one layer of baseline raster
+    Occu_r <- cbind(Occu_r,Rastab) # Add variable values
     Occu_r <- Occu_r[complete.cases(Occu_r), ] # Remove occurrences outside land
-    Occu_r <- Occu_r[, -4]
+    Occu_r <- Occu_r[, c("x", "y", "layer")]
     Occu_r[3] <- 1 # Assign presence = 1 for each occurrence
     colnames(Occu_r) <- c("x","y","Observed") # Rename columns
     
@@ -156,7 +157,7 @@ for (i in 1:length(Vect_Sp)) {
     if(!dir.exists("data/filtered_occurences")) {
       dir.create("data/filtered_occurences,")
     }
-    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/final_Occ&Var_", Sp, ".xlsx"), row.names = F)
+    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"), row.names = F)
     
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
@@ -233,7 +234,8 @@ for (i in 1:length(Vect_Sp)) {
     colors <- c("bio5" = "brown",   
                 "hurs_min" = "#2BDBCA", 
                 "npp" = "green4",
-                "Human_pop_2000" = "#8494FF",
+                # "Human_pop_2000" = "#8494FF",
+                # "Human_footprint" = "blue",
                 "globalCropland_2010CE" = "#E68613")  
      
     # Loop over each environmental variable and create a boxplot for each

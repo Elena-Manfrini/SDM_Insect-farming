@@ -17,10 +17,12 @@ computeEnvCombinations <- function(env.stack,
 {
   # Convert the raster stack values to a data frame
   combinations <- as.data.frame(values(Rastack[[c(names(Rastack))]]))
+  
   # Get coordinates for all cells in the raster stack and remove NA cells
-  all.xy <- xyFromCell(Rastack, 1:ncell(Rastack))
-  all.xy <- all.xy[- which(is.na(combinations[, 1])), ]
-  combinations <- combinations[- which(is.na(combinations[, 1])), ]
+  all.xy <- as.data.frame(xyFromCell(Rastack, 1:ncell(Rastack)))
+  all.xy <- all.xy[complete.cases(combinations), ]
+  
+  combinations <- combinations[complete.cases(combinations), ]
   
   # All possible combination in the environment
   comb.cat <- sapply(colnames(combinations), function(x, combs, seqs.)
@@ -94,9 +96,10 @@ intervals <- list(
   bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 80),
   hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 80),
   npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 80),
-  # Human_pop_2000 = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 80)
-   # ,
   globalCropland_2010CE = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 80)
+  # ,
+  # Human_footprint = seq(min(combinations[, 5]), max(combinations[, 5]), length.out = 80),
+  # Human_pop_2000 = seq(min(combinations[, 6]), max(combinations[, 6]), length.out = 80)
 )
   
 names(intervals) <- names(Rastack)

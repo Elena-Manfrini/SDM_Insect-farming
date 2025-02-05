@@ -40,6 +40,7 @@ Human_pop_2000 <- rast("data/raw/bioclim/Human_pop/baseYr_total_2000.tif")
 Human_pop_2000 <- aggregate(Human_pop_2000, fact = 5, fun="mean")
 Human_pop_2000 <- resample(Human_pop_2000,
                           raster_list[["CHELSA_npp"]])
+raster_list[["Human_pop_2000"]] <- Human_pop_2000
 
 # log 
 Human_pop_2000_log <- log(Human_pop_2000 + 1)
@@ -49,7 +50,7 @@ minmax <- minmax(Human_pop_2000)
 # Normalize the raster
 Human_pop_2000_normalized <- (Human_pop_2000 - minmax[1,]) / (minmax[2,] - minmax[1,])
 
-raster_list[["Human_pop_2000"]] <- Human_pop_2000_log
+# raster_list[["Human_pop_2000_log"]] <- Human_pop_2000_log
 
 
 ### 1.b Cropland
@@ -61,6 +62,19 @@ cropland <- aggregate(cropland, fact = 5, fun="mean")
 cropland <- resample(cropland,
                            raster_list[["CHELSA_npp"]])
 raster_list[["globalCropland_2010CE"]] <- cropland
+
+### 1.a Human footprint
+# # Upload Human footprint
+Human_footprint <- rast("data/raw/bioclim/Human_footprint/wildareas-v3-2009-human-footprint.tif")
+Human_footprint <- aggregate(Human_footprint, fact = 5, fun="mean")
+
+# Step 1: Reproject Human_footprint to Human_pop_2000 match  CRS
+Human_footprint_proj <- project(Human_footprint, Human_pop_2000)
+
+Human_footprint <- resample(Human_footprint_proj,
+                           raster_list[["CHELSA_npp"]])
+
+raster_list[["Human_footprint"]] <- Human_footprint_proj
 
 # stack rasters
 Rastack <- rast(raster_list) # transform raster list into stack
