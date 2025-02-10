@@ -114,46 +114,16 @@ for (i in 1:length(Vect_Sp)){
   
   # Download species occurrences from GBIF
   occurrence <- occ_search(scientificName = Sp,
-                           basisOfRecord = c(
-                             # "PRESERVED_SPECIMEN",
-                           #                   "LIVING_SPECIMEN",
-                           #                   "OBSERVATION",
-                                             "HUMAN_OBSERVATION",
-                                             "MACHINE_OBSERVATION"
-                                             # "MATERIAL_SAMPLE",
-                                             # "LITERATURE",
-                                             # "MATERIAL_CITATION",
-                                             # "OCCURRENCE"
-                           ), ### remove "UNKNOWN","FOSSIL_SPECIMEN"
                            year = '1980,2024', 
                            limit = 300000,
                            fields= "minimal")
   
   Occu <- data.frame(
-    x = c(occurrence$HUMAN_OBSERVATION$data$decimalLongitude, 
-          occurrence$MACHINE_OBSERVATION$data$decimalLongitude
-          # ,
-          # occurrence$LIVING_SPECIMEN$data$decimalLongitude,
-          # occurrence$OBSERVATION$data$decimalLongitude,
-          # occurrence$MATERIAL_SAMPLE$data$decimalLongitude,
-          # occurrence$LITERATURE$data$decimalLongitude,
-          # occurrence$MATERIAL_CITATION$data$decimalLongitude,
-          # occurrence$OCCURRENCE$data$decimalLongitude
-          ),
-    y = c(occurrence$HUMAN_OBSERVATION$data$decimalLatitude, 
-          occurrence$MACHINE_OBSERVATION$data$decimalLatitude
-          # ,
-          # occurrence$LIVING_SPECIMEN$data$decimalLatitude,
-          # occurrence$OBSERVATION$data$decimalLatitude,
-          # occurrence$MATERIAL_SAMPLE$data$decimalLatitude,
-          # occurrence$LITERATURE$data$decimalLatitude,
-          # occurrence$MATERIAL_CITATION$data$decimalLatitude,
-          # occurrence$OCCURRENCE$data$decimalLatitude
-          )
-  ) %>% na.omit()
+    x = occurrence$data$decimalLongitude,
+    y = occurrence$data$decimalLatitude) %>% na.omit()
 
   # Save occurrences to an Excel file
-  xlsx::write.xlsx(Occu, paste0("data/raw/occurences/Occurences_Human&Machine_", Sp, ".xlsx"), row.names = FALSE)
+  xlsx::write.xlsx(Occu, paste0("data/raw/occurences/Occurences_", Sp, ".xlsx"), row.names = FALSE)
   
   # Append the species to the completion log
   write(sp, file = log_file, append = TRUE)
