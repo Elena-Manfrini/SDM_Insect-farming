@@ -110,8 +110,10 @@ for (i in 1:length(Vect_Sp)) {
     }, df = var.occ_2)
     
     outs <- unique(unlist(outs))
+    
     # Remove occurrences outliers from midpoint dataframe
     cur.sp.pixels.filt <- cur.sp.pixels[-outs,]
+    
     
     ### 3.2 Convex Hull creation
     
@@ -153,11 +155,19 @@ for (i in 1:length(Vect_Sp)) {
     Fin_occ_var <- Fin_occ_var %>%
       dplyr::select(-ID)
     
+    # outconv <- Fin_occ_var[outs,]
+    # inconv <- Fin_occ_var[-outs,]
+    # 
+    # plot(Rastack[[1]])
+    # points(inconv[ , c("x", "y")], pch = 20, cex = 0.5, col = "blue")
+    # points(outconv[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
+    
+    
     # Save occurrences to an Excel file
     if(!dir.exists("data/filtered_occurences")) {
       dir.create("data/filtered_occurences,")
     }
-    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"), row.names = F)
+    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_final_15_bio6", Sp, ".xlsx"), row.names = F)
     
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
@@ -234,6 +244,7 @@ for (i in 1:length(Vect_Sp)) {
     colors <- c("bio5" = "brown",   
                 "hurs_min" = "#2BDBCA", 
                 "npp" = "green4",
+                "bio6" = "black",
                 # "Human_pop_2000" = "#8494FF",
                 # "Human_footprint" = "blue",
                 "globalCropland_2010CE" = "#E68613")  
@@ -258,7 +269,7 @@ for (i in 1:length(Vect_Sp)) {
     all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
                               top = Sp)
     # # Save the grid to a PNG file
-    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, "_final.png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, "_bio6.png"), plot = all_plots, width = 10, height = 8, dpi = 300)
     # 
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     

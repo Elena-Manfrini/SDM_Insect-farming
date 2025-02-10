@@ -59,30 +59,31 @@ for (i in 1:length(Vect_Sp)) {
   
   # After tuning it on a separate Rscript (GAM_param)
   # Define GAM model parameters
-  user.GAM <- list('_allData_allRun' = list(select = FALSE, method = "GCV.Cp", 
+  user.GAM <- list('_allData_allRun' = list(select = FALSE, method = "GCV.Cp",
                                             formula = Hermetia.illucens ~ s(bio5, k=15, sp = 0.01) + s(hurs_min, k=15, sp = 0.01) + s(npp, k=15, sp = 0.01) + s(globalCropland_2010CE,k=15, sp = 0.01)))
   
   # 2.1.b Tune XGBOOST model 
   # After tuning it on a separate Rscript (XGBoost_param)
-  # user.XGBOOST <- list('_allData_allRun' = list(nrounds = 500, max.depth = 4))
-  
-  # 2.1.c Tune RF model
-  # After tuning it on a separate Rscript (XGBoost_param)
-  # user.RF <- list('_allData_allRun' = list(ntrees = 1000, mtry = 2))
-  
+  user.XGBOOST <- list('_allData_allRun' = list(nrounds = 500, max.depth = 4))
+  # 
+  # # 2.1.c Tune RF model
+  # # After tuning it on a separate Rscript (XGBoost_param)
+  user.RF <- list('_allData_allRun' = list(ntrees = 1000, mtry = 2))
+
   # 2.1.d Combine all tuned models
   user.val <- list(
-    # XGBOOST.binary.xgboost.xgboost = user.XGBOOST,
-                   # RF.binary.randomForest.randomForest = user.RF,
+     XGBOOST.binary.xgboost.xgboost = user.XGBOOST,
+                    RF.binary.randomForest.randomForest = user.RF,
                    GAM.binary.mgcv.gam = user.GAM)
 
   # # # Define modeling options
   model_parameters <- bm_ModelingOptions(
     data.type = "binary", # Binary classification (presence/absence)
     models = c(
-      # 'RF', 'XGBOOST','MAXNET', 
-               'GAM'
-               # , 'GLM'
+      'RF', 'XGBOOST','MAXNET',
+                'GAM'
+                ,
+               'GLM'
                ),  # Full list of models
     strategy = "user.defined",
     user.val = user.val,
@@ -96,10 +97,9 @@ for (i in 1:length(Vect_Sp)) {
   myBiomodModelOut <- BIOMOD_Modeling(
     proj_names,
     modeling.id = "Modeling",
-    models = c(
-      # 'RF', 'XGBOOST','MAXNET',
-               'GAM'
-               # , 'GLM'
+    models = c('RF', 'XGBOOST','MAXNET',
+                'GAM',
+               'GLM'
                ),
     OPT.strategy = "user.defined",
     OPT.user = model_parameters,
@@ -127,13 +127,13 @@ for (i in 1:length(Vect_Sp)) {
   #   do.progress = TRUE)
   
   # Save the modeling output
-  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/output_models_GAM.rds"))
+  saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/output_models_15.rds"))
   
   
   ## 2.2.a Response curves
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_GAM.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_15.RDS"))
   
   # Get the evaluation results for each model
   evals <- get_evaluations(myBiomodModelOut)
@@ -145,7 +145,7 @@ for (i in 1:length(Vect_Sp)) {
   selected_models <- Choosen_Model$full.name # Get the full names of selected models
   
   # Save the selected models
-  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_GAM.rds"))
+  saveRDS(selected_models, file = paste0("models/", Sp, "/selected_models_15.rds"))
   
   # Plot response curves for the selected models
   resp <- bm_PlotResponseCurves(bm.out = myBiomodModelOut,
@@ -160,7 +160,7 @@ for (i in 1:length(Vect_Sp)) {
   
   # Extract the model type from the 'Model' column
   resp <- resp %>%
-    mutate(Model_Type = sub(".*_(GLM|GAM|MAXNET|RF|XGBOOST|MAXNET)$", "\\1", Model))
+    mutate(Model_Type = sub(".*_(GAM|GLM|RF|XGBOOST|MAXNET)$", "\\1", Model))
   
   
   response <- ggplot(resp, aes(x = Var.value, y = Response)) + 
@@ -171,11 +171,12 @@ for (i in 1:length(Vect_Sp)) {
     ylim(0, 1.1) + 
     xlab("Variable value") +
     scale_color_manual(values = c(
-      # 'RF' = '#26c031', 
-      # 'XGBOOST' = '#38599f', 
-      # 'MAXNET' = '#db1010',
-      # 'GLM' = 'lightblue',
-      'GAM' = 'red'
+      'RF' = '#26c031',
+      'XGBOOST' = '#38599f',
+      'MAXNET' = '#db1010',
+      'GLM' = 'orange'
+      ,
+      'GAM' = 'darkgrey'
       )) +  # Custom color scale
     labs(color = "Model")
 
@@ -187,7 +188,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_GAM.jpeg",sep= ""),
+  ggsave(str_c(save_dir, "/",Sp,"_15.jpeg",sep= ""),
          response,
        dpi = 2000,
        bg = NULL,
@@ -216,7 +217,9 @@ for (i in 1:length(Vect_Sp)) {
     scale_color_manual(values = c(
       'RF' = '#26c031', 
       'XGBOOST' = '#38599f', 
-      'MAXNET' = '#db1010')) +  # Custom color scale
+      'MAXNET' = '#db1010',
+      'GLM' = 'orange',
+      'GAM' = 'darkgray')) +  # Custom color scale
     geom_jitter (alpha = 0.2, aes(col = Model))
   
   # Create the output directory for figures if it doesn't exist
@@ -226,7 +229,7 @@ for (i in 1:length(Vect_Sp)) {
   }
   
   # Save the plot 
-  ggsave(str_c(save_dir, "/",Sp,"_hfp.jpeg",sep=""),
+  ggsave(str_c(save_dir, "/",Sp,"_15.jpeg",sep=""),
          var_imp,
          dpi = 2000,
          bg = NULL,

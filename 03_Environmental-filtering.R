@@ -13,7 +13,7 @@ library(dplyr)
 computeEnvCombinations <- function(env.stack,
                                    var.intervals,
                                    plot = TRUE,
-                                   vars.to.plot = 1:4)
+                                   vars.to.plot = 1:5)
 {
   # Convert the raster stack values to a data frame
   combinations <- as.data.frame(values(Rastack[[c(names(Rastack))]]))
@@ -96,7 +96,8 @@ intervals <- list(
   bio5 = seq(min(combinations[, 1]), max(combinations[, 1]), length.out = 80),
   hurs_min = seq(min(combinations[, 2]), max(combinations[, 2]), length.out = 80),
   npp = seq(min(combinations[, 3]), max(combinations[, 3]), length.out = 80),
-  globalCropland_2010CE = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 80)
+  globalCropland_2010CE = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 80),
+  bio6 = seq(min(combinations[, 5]), max(combinations[, 5]), length.out = 80)
   # ,
   # Human_footprint = seq(min(combinations[, 5]), max(combinations[, 5]), length.out = 80),
   # Human_pop_2000 = seq(min(combinations[, 6]), max(combinations[, 6]), length.out = 80)
@@ -111,7 +112,7 @@ envir.space <- computeEnvCombinations(
       env.stack = Rastack,
       var.intervals = intervals,
       plot = TRUE,
-      vars.to.plot = 1:4
+      vars.to.plot = 1:5
     )
     
 # Save environmental space for each step size

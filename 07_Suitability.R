@@ -5,6 +5,7 @@ library(ggplot2)
 library(viridis)
 library(openxlsx)
 library(biomod2)
+library(dplyr)
 
 # Load environmental raster stack
 Rastack <- rast("data/final_baseline.tif")
@@ -13,18 +14,20 @@ Rastack <- rast("data/final_baseline.tif")
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
+
+Projection_class_sp.all <- data.frame()
+
 i <- 1
 # Loop over each species to process occurrence data
 for (i in 1:7) {
   Sp <- Vect_Sp[[i]] # Get the current species name.
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/model_output.RDS"))
-  selected_models <- readRDS(paste0("models/", Sp, "/selected_models.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_15_bio6.RDS"))
+  selected_models <- readRDS(paste0("models/", Sp, "/selected_models_15_bio6.RDS"))
 
-  ############# 1. Projection of Models
-  
-  ### 1.1 Individual models
+  ########################## 1. Projection of individual models
+
   proj_runs <- BIOMOD_Projection(
   bm.mod = myBiomodModelOut, # Input individual model.
   proj.name = paste0(Sp,"_Projection"), # Name for the projection.
@@ -32,8 +35,6 @@ for (i in 1:7) {
   models.chosen = selected_models,# Only use selected models.
   build.clamping.mask = TRUE,
   output.format = ".tif")
-  
-  ############# 2. Suitability raster
   
   # Load suitability projection raster
   Projection_raw <- rast(paste0("models","/",Sp,"/",gsub(" ",".",Sp),
@@ -46,32 +47,36 @@ for (i in 1:7) {
     return(x)
   })
   
-  ### 2.1 Projection Mean : Ensemble model
+  
+  
+  ########################## 2. Suitability raster
+  
+   ### 2.1 Projection Mean : Ensemble model
   
   Projection_ens <- mean(Projection_raw) # Calculate mean suitability across layers : Ensemble model
   names(Projection_ens) <- c("Suitability")
-
-  # Plotting suitability
+  
+  ## Save raster of suitability
+  saveRDS(Projection_ens, file = paste0("output/Suitability/", Sp, "_ens_mod_15_bio6.rds"))
+  
+ 
+   ###### Plot suitability raster
   
   # Convert raster to data frame for plotting
   raster_df <- as.data.frame(Projection_ens, xy = TRUE)
   
   ## Save drataframe
-  
   # Create species-specific directories
   save_dir <- paste0("output/", "Suitability")
   if (!dir.exists(save_dir)) {
     dir.create(save_dir)
   }
   
-  # Save the selected models
-  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod.rds"))
+  # Save the dataframe of suitability
+  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_df_15_bio6.rds"))
   
-  ## Plot suitability raster
-  
-  # Occurrence of the species to get coordinates
-  
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
+  # Species occurrences to get coordinates
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final_15_bio6", Sp, ".xlsx"))
   
   # Map
   plot_raster <- ggplot() +
@@ -94,6 +99,7 @@ for (i in 1:7) {
       legend.position = "right",
       legend.key.height = unit(1, "cm"))
 
+  
   # Create output directory for figures if it doesn't exist
   Save_dir_fig <- "figures"
   if (!dir.exists(Save_dir_fig)) {
@@ -108,7 +114,7 @@ for (i in 1:7) {
   
   # Save the plot
   ggsave(
-    str_c("figures/", Sp,"/Plot_Raster.jpeg",sep=""),
+    str_c("figures/", Sp,"/Plot_Raster_bio6.jpeg",sep=""),
     plot_raster ,
     dpi = 500,
     bg = NULL,
@@ -117,7 +123,8 @@ for (i in 1:7) {
     units = "in"
   )
   
-  ############# 3. Standard Deviation Raster
+  
+  ########################## 3. Standard Deviation Raster
  
     Projection_sd <- app(Projection_raw, sd) # Calculate standard deviation across layers.
     names(Projection_sd) <- c("Standard_deviation")
@@ -157,17 +164,15 @@ for (i in 1:7) {
       units = "in"
     )
     
-    ############# 4. Suitability classification
     
-    # Load occurrence data for the species
-    Occu <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_", Sp, ".xlsx"))
-    
-    # Extract suitability values at occurrence points
+    ##########################  4. Suitability classification
+
     Occu_Suit <- terra::extract(Projection_ens,
-                          Occu[,1:2],
+                          Fin_occ_var[,1:2],
                           ID=F)
     
-    boxplot(Occu_Suit) # Boxplot of suitability values.
+    # boxplot(Occu_Suit)
+    boxplot(Occu_Suit[,"Suitability"]) # Boxplot of suitability values.
   
     ### 4.1 Calculate quantiles (5% and 25%)
     
@@ -187,23 +192,28 @@ for (i in 1:7) {
       ) +
       annotate("text", x = quantiles[1], y = 0, label = "5%", color = "black", vjust = -0.5, angle = 90) +
       annotate("text", x = quantiles[2], y = 0, label = "25%", color = "black", vjust = -0.5, angle = 90)
-    
+     
     
     ### 4.2 Reclassify raster values based on quantiles
+    
+    ### 4.2.a 3 categories
     ## 0 -> 5% = Low
     ## 5 -> 25% = Intermediate
     ## 25 -> 100% = High
     
-     Projection_class <-  Projection_ens
-
-     Projection_class[Projection_class$Suitability < (quantiles[["5%"]])] <- 0
-     Projection_class[Projection_class$Suitability >= quantiles[["5%"]] & 
-                        Projection_class$Suitability < quantiles[["25%"]]] <- 0.5
-     Projection_class[Projection_class$Suitability >= quantiles[["25%"]]] <- 1
-
+    Projection_class <-  Projection_ens
+    
+    Projection_class[Projection_class$Suitability < (quantiles[["5%"]])] <- 0
+    Projection_class[Projection_class$Suitability >= quantiles[["5%"]] & 
+                       Projection_class$Suitability < quantiles[["25%"]]] <- 0.5
+    Projection_class[Projection_class$Suitability >= quantiles[["25%"]]] <- 1
+    
+    
      # Convert classified raster to data frame for plotting
     Projection_Class <- as.data.frame(Projection_class, xy=T)
-    write.table(Projection_Class,paste0("Projection_Class",Sp))
+    
+    # Save the selected models
+    saveRDS(Projection_Class, file = paste0("output/suitability/", Sp, "_class_ens_mod_15_bio6.rds"))
     
     # Plot classified suitability raster
     plot_raster_Class <- ggplot() +
@@ -228,7 +238,7 @@ for (i in 1:7) {
     legend.key.height = unit(1, "cm"))
 
     ggsave(
-      str_c("figures/", Sp,"/Plot_RasterClass_80itv.jpeg",sep=""),
+      str_c("figures/", Sp,"/Plot_RasterClass_80itv_15_bio6.jpeg",sep=""),
       plot_raster_Class,
       # "jpeg",
       dpi = 500,
@@ -237,15 +247,57 @@ for (i in 1:7) {
   height = 8.5,
   units = "in"
   )
+    
+
+    ### 4.2.b Highest categories
+    
+    Projection_class_sp <-  Projection_ens
+    Projection_class_sp[Projection_class_sp$Suitability < quantiles[["25%"]]] <- 0
+    Projection_class_sp[Projection_class_sp$Suitability >= quantiles[["25%"]]] <- 1
+    
+    # Convert classified raster to data frame for plotting
+    Projection_class_sp <- as.data.frame(Projection_class_sp, xy=T)
+    colnames(Projection_class_sp) <- c("x", "y", "Hightsuit")
+    
+    # Add a column to track the species name
+    Projection_class_sp$species <- Sp
+    
+    # Append to Projection_class_sp.all
+    Projection_class_sp.all <- rbind(Projection_class_sp.all, Projection_class_sp)
+    
 }
 
+############################## Plot combined High suitability data for all species
+### **** 4.2.b Highest categories
 
+Nbsp_Highsuit <- Projection_class_sp.all %>%
+  group_by(x, y) %>%
+  summarize(Nb_sp = sum(Hightsuit), .groups = "drop")
 
+  
+  HighSuit_allsp <- ggplot() +
+  geom_tile(data = Nbsp_Highsuit, aes(x = x, y = y, fill = as.factor(Nb_sp))) +
+  scale_fill_viridis( discrete = TRUE, name = "Number of species with high suitability", option = "D", direction = 1) +  
+  coord_equal() +  # Keep proportions
+  theme_minimal() +  
+  labs(title = "") +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.title = element_blank(),
+    axis.text = element_text(color = "gray50"),
+    legend.position = "right",
+    legend.key.height = unit(1, "cm"))
 
-
-
-
-
+  ggsave(
+    str_c("figures/Plot_RasterClass_allSP.jpeg",sep=""),
+    HighSuit_allsp,
+    # "jpeg",
+    dpi = 500,
+    bg = NULL, 
+    width = 15,
+    height = 8.5,
+    units = "in"
+  )
 
 
 
@@ -322,8 +374,6 @@ carte_mondiale <- ggplot(data = world_merged_sf) +
     axis.ticks = element_blank(),
     panel.grid = element_line(color = "gray70", size = 0.1)
   )
-
-
 
 
 ggsave(

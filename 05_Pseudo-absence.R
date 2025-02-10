@@ -22,7 +22,7 @@ i <- 1
   Sp <- Vect_Sp[[i]] # Current species name
   
   # Occurrence and environmental values for the species
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final_15_bio6", Sp, ".xlsx"))
   
   # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
@@ -82,12 +82,18 @@ i <- 1
   #### Convexhull Species
   conv_hull <- cbind(data.frame(cursp.inhull), envir.space$coords)
   conv_hull_filtered <- conv_hull[conv_hull$cursp.inhull != FALSE, ]
+  
+  ### Presence outside convhull
+  pres_outsideconvhull <- cbind(data.frame(presencepixels), envir.space$coords)
+  pres_outsideconvhull_filtered <- pres_outsideconvhull[pres_outsideconvhull$presencepixels != FALSE, ]
+  
     
   ### Visualisation data
   plot(Rastack[[1]])
   points(conv_hull_filtered[ , c("x", "y")], pch = 20, cex = 0.5, col = "blue")
+  points(pres_outsideconvhull_filtered[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
   points(pseudo_only[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
-  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
+  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
   
   
   # Create the output directory for models if it doesn't exist
