@@ -29,7 +29,7 @@ for (i in 1:length(Vect_Vars)) {
   # Load each raster file as a SpatRaster object
   raster_path <- paste0("data/raw/bioclim/", Name_Var, ".tif")
   raster <- rast(raster_path)
-  raster <- aggregate(raster, fact = 5, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
+  raster <- aggregate(raster, fact = 15, fun="mean") ## REMETTRE A 5: change from 1km^2 pixel to 5km^2
   # Add the raster to the list with its corresponding variable name
   raster_list[[Name_Var]] <- raster
 }
@@ -37,18 +37,18 @@ for (i in 1:length(Vect_Vars)) {
 ### 1.a Human pop density
 # # Upload Human pop density
 Human_pop_2000 <- rast("data/raw/bioclim/Human_pop/baseYr_total_2000.tif")
-Human_pop_2000 <- aggregate(Human_pop_2000, fact = 5, fun="mean")
+Human_pop_2000 <- aggregate(Human_pop_2000, fact = 15, fun="mean")
 Human_pop_2000 <- resample(Human_pop_2000,
                           raster_list[["CHELSA_npp"]])
 raster_list[["Human_pop_2000"]] <- Human_pop_2000
 
-# log 
-Human_pop_2000_log <- log(Human_pop_2000 + 1)
-
-# Normalize
-minmax <- minmax(Human_pop_2000)
-# Normalize the raster
-Human_pop_2000_normalized <- (Human_pop_2000 - minmax[1,]) / (minmax[2,] - minmax[1,])
+# # log 
+# Human_pop_2000_log <- log(Human_pop_2000 + 1)
+# 
+# # Normalize
+# minmax <- minmax(Human_pop_2000)
+# # Normalize the raster
+# Human_pop_2000_normalized <- (Human_pop_2000 - minmax[1,]) / (minmax[2,] - minmax[1,])
 
 # raster_list[["Human_pop_2000_log"]] <- Human_pop_2000_log
 
@@ -56,7 +56,7 @@ Human_pop_2000_normalized <- (Human_pop_2000 - minmax[1,]) / (minmax[2,] - minma
 ### 1.b Cropland
 
 cropland <- rast("data/raw/bioclim/globalCropland_2010CE.tif")
-cropland <- aggregate(cropland, fact = 5, fun="mean")
+cropland <- aggregate(cropland, fact = 15, fun="mean")
 # Ensure that all variables are on the same extent --> This is not the case here.
 # Convert globalCropland_2010CE raster to same extent as CHELSA variables
 cropland <- resample(cropland,
@@ -66,7 +66,7 @@ raster_list[["globalCropland_2010CE"]] <- cropland
 ### 1.a Human footprint
 # # Upload Human footprint
 Human_footprint <- rast("data/raw/bioclim/Human_footprint/wildareas-v3-2009-human-footprint.tif")
-Human_footprint <- aggregate(Human_footprint, fact = 5, fun="mean")
+Human_footprint <- aggregate(Human_footprint, fact = 15, fun="mean")
 
 # Step 1: Reproject Human_footprint to Human_pop_2000 match  CRS
 Human_footprint_proj <- project(Human_footprint, Human_pop_2000)
@@ -109,7 +109,6 @@ Rastack <- crop(Rastack, extent_to_crop)
 writeRaster(Rastack, filename = "data/raw/bioclim/baseline.tif",overwrite = TRUE)
 
 
-
 ############# 3. Check collineratity
 
 Rastack <- rast("data/raw/bioclim/baseline.tif")
@@ -117,12 +116,12 @@ Rastack <- rast("data/raw/bioclim/baseline.tif")
 
 ### 3.a Correlation tree
 #Create a PNG to store the output image of the collinearity tree
-png("./output/collinearity_groups_humanlog.png")
+png("./output/collinearity_groups_15_0,6.png")
 
 # Remove highly collinear variables by grouping them using a correlation threshold
 groups <- removeCollinearity(Rastack, plot = T,
                              # This tests for collinearity and groups variables that are inter-collinear
-                             multicollinearity.cutoff = 0.5, # Cutoff threshold
+                             multicollinearity.cutoff = 0.6, # Cutoff threshold
                              # sample.points = TRUE,
                              # nb.points = 50000,
                              method = "spearman") # Spearman correlation used due to possible non-normal variable distribution
@@ -139,7 +138,7 @@ cor_matrix <- cor(Rastack_df, method = "pearson")
 
 # plot the correlation matrix
 #Create a PNG to store the output image of the collinearity tree
-png("./output/correlation_matrix.png")
+png("./output/correlation_matrix_15.png")
 ggcorrplot(cor_matrix, method = "circle",  type = "upper")
 dev.off()
 
@@ -148,7 +147,7 @@ dev.off()
 
 
 # Stack the definitive environmental variables into a single raster object
-Rastack_fin <- Rastack[[c("CHELSA_bio5", "CHELSA_hurs_min", "CHELSA_npp", "globalCropland_2010CE")]]
+Rastack_fin <- Rastack[[c("CHELSA_hurs_min", "CHELSA_bio5","CHELSA_bio6", "globalCropland_2010CE", "CHELSA_npp")]]
 
 names(Rastack_fin) <- gsub("CHELSA_", 
                            "",
