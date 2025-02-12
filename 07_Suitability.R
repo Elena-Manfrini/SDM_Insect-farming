@@ -23,8 +23,8 @@ for (i in 1:7) {
   Sp <- Vect_Sp[[i]] # Get the current species name.
   
   # Load pre-trained model outputs for the species
-  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_15_bio6.RDS"))
-  selected_models <- readRDS(paste0("models/", Sp, "/selected_models_15_bio6.RDS"))
+  myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models_15_2,5.RDS"))
+  selected_models <- readRDS(paste0("models/", Sp, "/selected_models_15_2,5.RDS"))
 
   ########################## 1. Projection of individual models
 
@@ -57,13 +57,102 @@ for (i in 1:7) {
   names(Projection_ens) <- c("Suitability")
   
   ## Save raster of suitability
-  saveRDS(Projection_ens, file = paste0("output/Suitability/", Sp, "_ens_mod_15_bio6.rds"))
+  saveRDS(Projection_ens, file = paste0("output/Suitability/", Sp, "_ens_mod_15_2,5.rds"))
   
+  Projection_ens <- readRDS(paste0("output/Suitability/", Sp, "_ens_mod_15_2,5.rds"))
  
    ###### Plot suitability raster
   
   # Convert raster to data frame for plotting
   raster_df <- as.data.frame(Projection_ens, xy = TRUE)
+  
+  
+  #################################################################
+  ### Test difference btw 2,5% and 5% conv hull
+  ## Save raster of suitability
+  ens_5 <- readRDS(paste0("output/Suitability/", Sp, "_ens_mod_15.rds"))
+  # Convert raster to data frame for plotting
+  raster_df_5 <- as.data.frame(ens_5, xy = TRUE)
+  colnames(raster_df_5) <- c('x', 'y', 'Suitability_5')
+  
+  merge.Suit <- merge(raster_df_5,raster_df, by = c('x', 'y'))
+  ## Hypothèse : davantage d'habitat favorables avec un convex hull qui elimine 2,5 % des outliers que 5%
+  ## Différence entre les
+  merge.Suit$Suitability_Difference <- merge.Suit$Suitability - merge.Suit$Suitability_5
+  
+  nrow(merge.Suit) - sum(merge.Suit$Suitability_Difference > 0)
+  
+  
+  ggplot() +
+    geom_tile(data = merge.Suit, aes(x = x, y = y, fill = Suitability_Difference)) +
+    scale_fill_viridis(name = "Suitability", option = "A", direction = 1) +  
+    coord_equal() +  # Keep proportions
+    theme_minimal() +  
+    labs(title = "Suitability Difference between 2,5% and 5% of occurences outsite convex hull",
+         subtitle = Sp
+    ) +
+    theme(
+      plot.title = element_text(size = 18, face = "bold"),
+      plot.subtitle = element_text(size = 14, face = "italic"),
+      axis.title = element_blank(),
+      axis.text = element_text(color = "gray50"),
+      legend.position = "right",
+      legend.key.height = unit(1, "cm"))
+  
+  
+  Class2_5 <- readRDS(paste0("output/suitability/", Sp, "_class_ens_mod_15_2,5.rds"))
+  Class2_5_df <- as.data.frame(Class2_5, xy = TRUE)
+  colnames(Class2_5_df) <- c('x', 'y', 'Suitability_25')
+  
+  Class5 <-readRDS(paste0("output/Suitability/", Sp, "_class_ens_mod_15.rds"))
+  Class5_df <- as.data.frame(Class5, xy = TRUE)
+  colnames(Class5_df) <- c('x', 'y', 'Suitability_5')
+  
+  merge.Suit_Class <- merge(Class2_5_df,Class5_df, by = c('x', 'y'))
+  
+  ## Hypothèse : davantage d'habitat favorables avec un convex hull qui elimine 2,5 % des outliers que 5%
+  ## Différence entre les
+  merge.Suit_Class$SuitabilityClass_Difference <- merge.Suit_Class$Suitability_25 - merge.Suit_Class$Suitability_5
+  merge.Suit_Class$SuitabilityClass_Difference <- as.factor(merge.Suit_Class$SuitabilityClass_Difference)
+  table(merge.Suit_Class$SuitabilityClass_Difference)
+  
+  diff <- ggplot() +
+    geom_tile(data = merge.Suit_Class, aes(x = x, y = y, fill = SuitabilityClass_Difference)) +
+    scale_fill_manual(
+      name = "Suitability changes",
+      values = c("-0.5" = "darkred", "0" = "#F5E8C2", "0.5" = "darkgreen"),
+      labels = c("Loose suitability", "No change", "Gain suitability")
+    ) +
+    coord_equal() +
+    theme_minimal() +
+    labs(
+      title = "Suitability differences between conevxhull 2,5% - 5%",
+      subtitle = Sp
+    ) +
+    theme(
+      plot.title = element_text(size = 18, face = "bold"),
+      plot.subtitle = element_text(size = 14, face = "italic"),
+      axis.title = element_blank(),
+      axis.text = element_text(color = "gray50"),
+      legend.position = "right",
+      legend.key.height = unit(1, "cm")
+    )
+
+  
+  # Save the plot
+  ggsave(
+    paste0("figures/", Sp,"/ClassDiff_2,5-5.jpeg",sep=""),
+    diff,
+    dpi = 500,
+    bg = NULL,
+    width = 15,
+    height = 8.5,
+    units = "in"
+  )
+  
+  
+  #################################################################
+  
   
   ## Save drataframe
   # Create species-specific directories
@@ -72,11 +161,11 @@ for (i in 1:7) {
     dir.create(save_dir)
   }
   
-  # Save the dataframe of suitability
-  saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_df_15_bio6.rds"))
-  
+  # # Save the dataframe of suitability
+  # saveRDS(raster_df, file = paste0("output/Suitability/", Sp, "_ens_mod_df_15_2,5.rds"))
+  # 
   # Species occurrences to get coordinates
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final_15_bio6", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final_15", Sp, ".xlsx"))
   
   # Map
   plot_raster <- ggplot() +
@@ -114,7 +203,7 @@ for (i in 1:7) {
   
   # Save the plot
   ggsave(
-    str_c("figures/", Sp,"/Plot_Raster_bio6.jpeg",sep=""),
+    str_c("figures/", Sp,"/Plot_Raster_15_2,5.jpeg",sep=""),
     plot_raster ,
     dpi = 500,
     bg = NULL,
@@ -133,7 +222,7 @@ for (i in 1:7) {
     raster_sd_df <- as.data.frame(Projection_sd, xy = TRUE)
     
     # Save the selected models
-    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod.rds"))
+    saveRDS(raster_sd_df, file = paste0("output/suitability/", Sp, "_sd_ens_mod_15_2,5.rds"))
     
     # Plot standard deviation raster
     plot_raster_sd <- ggplot() +
@@ -155,7 +244,7 @@ for (i in 1:7) {
 
     # Save the standard deviation plot
     ggsave(
-      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_80itv_6var.jpeg",sep=""),
+      str_c("figures/", Sp,"/Plot_Raster_Standard-deviation_15_2,5.jpeg",sep=""),
       plot_raster_sd ,
       dpi = 500,
       bg = NULL, 
@@ -208,12 +297,13 @@ for (i in 1:7) {
                        Projection_class$Suitability < quantiles[["25%"]]] <- 0.5
     Projection_class[Projection_class$Suitability >= quantiles[["25%"]]] <- 1
     
+    # Save the selected models
+    saveRDS(Projection_class, file = paste0("output/suitability/", Sp, "_class_ens_mod_15_2,5.rds"))
+    
     
      # Convert classified raster to data frame for plotting
     Projection_Class <- as.data.frame(Projection_class, xy=T)
     
-    # Save the selected models
-    saveRDS(Projection_Class, file = paste0("output/suitability/", Sp, "_class_ens_mod_15_bio6.rds"))
     
     # Plot classified suitability raster
     plot_raster_Class <- ggplot() +
@@ -238,7 +328,7 @@ for (i in 1:7) {
     legend.key.height = unit(1, "cm"))
 
     ggsave(
-      str_c("figures/", Sp,"/Plot_RasterClass_80itv_15_bio6.jpeg",sep=""),
+      str_c("figures/", Sp,"/Plot_RasterClass_80itv_15_2,5.jpeg",sep=""),
       plot_raster_Class,
       # "jpeg",
       dpi = 500,
@@ -298,100 +388,3 @@ Nbsp_Highsuit <- Projection_class_sp.all %>%
     height = 8.5,
     units = "in"
   )
-
-
-
-### High suitability per country 
-
-# Convertir les données en un objet sf
-Projection_sf <- st_as_sf(Projection_Class, coords = c("x", "y"), crs = 4326)
-
-# Charger le shapefile des pays
-world <- ne_countries(scale = "medium", returnclass = "sf")
-
-# Rendre les géométries valides pour éviter les problèmes liés aux coordonnées non planaires
-world_valid <- st_make_valid(world)
-
-# Associer les pixels à un pays
-pixels_countries <- st_join(Projection_sf, world_valid, join = st_intersects)
-
-# Convertir en data frame pour éviter les problèmes de classe 'sf'
-pixels_countries_df <- as.data.frame(pixels_countries)
-
-# Calculer le nombre de pixels par classe de suitability et par pays
-country_class_pixel_count <- pixels_countries_df %>%
-  group_by(admin, Suitability) %>%
-  summarize(pixel_count = n(), .groups = "drop")
-
-# Calculer le nombre total de pixels par pays (toutes classes confondues)
-total_pixels_per_country <- Projection_sf %>%
-  st_join(world_valid, join = st_intersects) %>%
-  as.data.frame() %>%
-  group_by(admin) %>%
-  summarize(total_pixels = n(), .groups = "drop")
-
-# Joindre les données et calculer le pourcentage pour chaque classe
-percentage_pixels <- left_join(country_class_pixel_count, total_pixels_per_country, by = "admin") %>%
-  mutate(percentage = (pixel_count / total_pixels) * 100)
-
-# Filtrer pour la classe de suitability "forte" (ou une autre classe spécifique)
-percentage_pixels_strong <- percentage_pixels %>%
-  filter(Suitability == 1)
-
-# Convertir le shapefile en data frame pour éviter les problèmes avec 'left_join'
-world_df <- as.data.frame(world)
-
-# Joindre ce résultat au shapefile des pays
-world_merged <- left_join(world_df, percentage_pixels_strong, by = c("admin" = "admin"))
-
-# Convertir à nouveau en un objet sf pour la visualisation
-world_merged_sf <- st_as_sf(world_merged)
-
-# Créer la carte
-carte_mondiale <- ggplot(data = world_merged_sf) +
-  geom_sf(aes(fill = percentage), color = "black", size = 0.1) +
-  scale_fill_viridis_c(
-    name = "Pourcentage\nde surface par classe de suitability",
-    na.value = "grey90",  # Pour les pays sans données
-    option = "D",
-    direction = 1
-  ) +
-  theme_minimal() +
-  labs(
-    title = "Pourcentage de surface globale par classe de suitability",
-    subtitle = "pour chaque pays du monde",
-    caption = "Source: Données raster et Natural Earth"
-  ) +
-  theme(
-    plot.title = element_text(size = 20, face = "bold"),
-    plot.subtitle = element_text(size = 14, face = "italic"),
-    plot.caption = element_text(size = 10, hjust = 0),
-    legend.position = "bottom",
-    legend.title = element_text(size = 12, face = "bold"),
-    legend.text = element_text(size = 10),
-    axis.title = element_blank(),
-    axis.text = element_blank(),
-    axis.ticks = element_blank(),
-    panel.grid = element_line(color = "gray70", size = 0.1)
-  )
-
-
-ggsave(
-  
-  str_c("Etablissement_par_pays",Sp,".jpeg",sep=""),
-  
-  carte_mondiale,
-  
-  # "jpeg",
-  
-  dpi = 500,
-  
-  bg = NULL,
-  
-  width = 15,
-  
-  height = 8.5,
-  
-  units = "in"
-  
-) 
