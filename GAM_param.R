@@ -23,7 +23,7 @@ for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   
   # Occurrence and environmental values for the species
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final_15_bio6", Sp, ".xlsx"))
   
   # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
@@ -87,57 +87,78 @@ for (i in 1:length(Vect_Sp)) {
   print(paste("Test set size:", dim(test)[1]))
   
   ### We can only tune select and method parameters with biomod2 package
-  k_values <- c(3, 5, 10, 15)
-  sp_values <- c(0.001, 0.1 , 1, 10)
+  k_values <- c(10, 15, 25, 50)
   
   # select_values = c(TRUE, FALSE)
   methods <- c("GCV.Cp", "GACV.Cp", "REML", "P-REML", "ML", "P-ML")
-  
   # Create a dataframe to store results
-  results <- data.frame(K = character(), SP = character(), METHOD = character(), AIC = numeric(), AUC = numeric())
+  results <- data.frame(K = integer(), METHOD = character(), AIC = numeric(), Train_AUC = numeric(), Test_AUC = numeric())
   
-  
-  # Loop through different combinations of k and bs
-    for (method in methods) {
-      for (sp in sp_values) {
-        for (k in k_values) {
-      
+  for (method in methods) {
+    for (k in k_values) {
       # Fit GAM model
-      model <-  gam(Observed ~ s(bio5, k = k, sp = sp) + s(hurs_min, k = k, sp = sp) +
-                              s(npp, k = k, sp = sp) + s(globalCropland_2010CE, k = k, sp = sp),
-                            family = binomial, data = train, method = method, select = FALSE)
-      
-      # plot(model, residuals = TRUE, pch = 1)
+      model <- gam(Observed ~ s(bio5, k = k) + s(hurs_min, k = k) + s(bio6, k = best_k) +
+                     s(npp, k = k) + s(globalCropland_2010CE, k = k),
+                   family = binomial, data = train, method = method, select = FALSE)
       
       # Compute AIC
       model_aic <- AIC(model)
       
-      # Predict on test set
-      test$predicted <- predict(model, newdata = test, type = "response")
+      # Predict on training set
+      train <- train %>% mutate(predicted_train = predict(model, newdata = train, type = "response"))
+      train_roc <- roc(as.numeric(train$Observed), train$predicted_train)
+      train_auc <- auc(train_roc)
       
-      # Compute AUC
-      roc_curve <- roc(test$Observed, test$predicted)
-      model_auc <- auc(roc_curve)
+      # Predict on test set
+      test <- test %>% mutate(predicted_test = predict(model, newdata = test, type = "response"))
+      test_roc <- roc(as.numeric(test$Observed), test$predicted_test)
+      test_auc <- auc(test_roc)
       
       # Store results
-      results <- rbind(results, data.frame(K = k, SP = sp, METHOD = method, AIC = model_aic, AUC = model_auc))
-        }
-      }
+      results <- rbind(results, data.frame(K = k, METHOD = method, AIC = model_aic, Train_AUC = train_auc, Test_AUC = test_auc))
     }
+  }
+  
+  # Convert k to factor for better visualization
+  results$K <- as.factor(results$K)
+  
+  ggplot(results, aes(x = K)) +
+    geom_line(aes(y = Train_AUC, group = METHOD, color = "Train AUC"), size = 1) +
+    geom_line(aes(y = Test_AUC, group = METHOD, color = "Test AUC"), size = 1, linetype = "dashed") +
+    facet_wrap(~ METHOD) +
+    scale_color_manual(values = c("Train AUC" = "blue", "Test AUC" = "red")) +
+    labs(title = "Overfitting Check: Training vs. Test AUC",
+         x = "Number of Basis Functions (k)",
+         y = "AUC",
+         color = "Dataset") +
+    theme_minimal()
+  
+  ##### Best model parametrisation 
   
   # Find the best model based on AIC and AUC
-  best_model <- results %>% arrange(AIC, desc(AUC)) %>% head(1)
+  best_model <- results %>% arrange(AIC, desc(Train_AUC)) %>% slice(1)
+  best_k <- as.factor(best_model$K)
+  best_k <- as.numeric(as.character(best_k))
   
-  # Print best model parameters
-  print(best_model)
+  best_method <- best_model$METHOD
   
-  results$SP <- as.factor(results$SP)
+  train_f <- train[,-c(7)]
   
-  # Plot AIC and AUC to visualize performance
-  ggplot(results, aes(x = k, y = AUC, color = METHOD)) +
-    geom_point() + 
-    ggtitle("AUC for different GAM model parameters") +
-    theme_minimal()
-}
+  # Train the best model
+  best_model_run <- gam(Observed ~ s(bio5, k = best_k) + s(hurs_min, k = best_k) + s(bio6, k = best_k)+
+                          s(npp, k = best_k) + s(globalCropland_2010CE, k = best_k),
+                        family = binomial, data = train_f, method = best_method, select = FALSE)
   
+  par(mfrow = c(2, 2))
+  gam.check(best_model_run)
+  
+  k.check(best_model_run)
+  
+  
+  # Predict on test set using the best model
+  test <- test %>% mutate(best_predicted = predict(best_model_run, newdata = test, type = "response"))
+  
+  # Compute AUC for the best model
+  best_roc_curve <- roc(as.numeric(test$Observed), test$best_predicted)
+  best_auc <- auc(best_roc_curve)
   
