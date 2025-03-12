@@ -8,11 +8,12 @@ library(ggplot2)
 library(gridExtra)
 
 # Load Environmental Space
-envir.space <- readRDS("data/Environmental_Space.rds")
+envir.space <- readRDS("data/Environmental_Space_HumanPop.rds")
+
 # Load variable intervals
-intervals <- readRDS("data/intervals.rds")
+intervals <- readRDS("data/intervals_HumanPop.rds")
 # Load environmental raster stack
-Rastack <- rast("data/final_baseline.tif")
+Rastack <- rast("data/final_baseline_HumanPop.tif")
 
 # Species name
 Species <- read.xlsx("data/Species_names.xlsx")
@@ -21,6 +22,11 @@ Vect_Sp <- Species$Vect_Sp
 # Change baseline Spat raster as raster
 baseline_raster <- as(Rastack, "Raster")
 Rastab <- as.data.frame(baseline_raster, xy=T, na.rm = FALSE) # Take one layer of baseline raster
+
+out_in_ConvHull_All <- data.frame(Species = character(),
+                              NbOcc_InConv = numeric(),
+                              NbOcc_OutConv = numeric(),
+                              stringsAsFactors = FALSE)
 
 i <- 1
 # Loop over each species to process occurrence data
@@ -91,6 +97,19 @@ for (i in 1:length(Vect_Sp)) {
       var.occ_2 <- var.occ
     } 
     
+    
+    # Final dataframe of occurences and their respective variable values
+    Fin_occ_var <- cbind(Occu_2, var.occ_2)
+    Fin_occ_var <- Fin_occ_var %>%
+      dplyr::select(-ID)
+    
+    # Save occurrences to an Excel file
+    if(!dir.exists("data/filtered_occurences")) {
+      dir.create("data/filtered_occurences,")
+    }
+    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_final_HumanPop", Sp, ".xlsx"), row.names = F)
+    
+    
     ############# 3. Convex Hull
     
     ### 3.1 Convex Hull preparation
@@ -99,48 +118,48 @@ for (i in 1:length(Vect_Sp)) {
       replacing.values[[x]]$mids[match(int.to.replace[, x], replacing.values[[x]]$interval)]
     }, int.to.replace = env.itvl_2, replacing.values = envir.space$detailed.intervals) ### valeurs variables correspondant aux occurences uniques
     
-    # Remove occurrences outliers for the convex hull calculations (2,5% high and 2,5% low extreme)
-    convex.hull.interval = 0.05
+    # Remove occurrences outliers for the convex hull calculations (1% per variable)
+    convex.hull.interval = 0.01
     
-    Fin_occ_var <- cbind(Occu_2, var.occ_2)
-    Fin_occ_var <- Fin_occ_var %>%
-      dplyr::select(-ID)
+    # #################################  Outlier vizualisation
+    # # Humidity
+    # hurs_min_q <- quantile(Fin_occ_var$hurs_min, probs = c(0.005, 0.95))
+    # hurs_min_ext <- Fin_occ_var[which(Fin_occ_var[, "hurs_min"] <= hurs_min_q[1] | Fin_occ_var[, "hurs_min"] >= hurs_min_q[2]),]
+    # 
+    # # bio5
+    # bio5_q <- quantile(Fin_occ_var$bio5, probs = c(0.005, 0.95))
+    # bio5_ext <- Fin_occ_var[which(Fin_occ_var[, "bio5"] <= bio5_q[1] | Fin_occ_var[, "bio5"] >= bio5_q[2]),]
+    # 
+    # # bio6
+    # bio6_q <- quantile(Fin_occ_var$bio6, probs = c(0.005, 0.95))
+    # bio6_ext <- Fin_occ_var[which(Fin_occ_var[, "bio6"] <= bio6_q[1] | Fin_occ_var[, "bio6"] >= bio6_q[2]),]
     
-    # Hurs
-    hurs_min_q <- quantile(Fin_occ_var$hurs_min, probs = c(0.025, 0.975))
-    hurs_min_ext <- Fin_occ_var[which(Fin_occ_var[, "hurs_min"] <= hurs_min_q[1] | Fin_occ_var[, "hurs_min"] >= hurs_min_q[2]),]
-    
-    # bio5
-    bio5_q <- quantile(Fin_occ_var$bio5, probs = c(0.025, 0.975))
-    bio5_ext <- Fin_occ_var[which(Fin_occ_var[, "bio5"] <= bio5_q[1] | Fin_occ_var[, "bio5"] >= bio5_q[2]),]
-    
-    # globalCropland_2010CE
-    globalCropland_2010CE_q <- quantile(Fin_occ_var$globalCropland_2010CE, probs = c(0.025, 0.975))
-    globalCropland_2010CE_ext <- Fin_occ_var[which(Fin_occ_var[, "globalCropland_2010CE"] <= globalCropland_2010CE_q[1] | Fin_occ_var[, "globalCropland_2010CE"] >= globalCropland_2010CE_q[2]),]
-    
-    # npp
-    npp_q <- quantile(Fin_occ_var$npp, probs = c(0.025, 0.975))
-    npp_ext <- Fin_occ_var[which(Fin_occ_var[, "npp"] <= npp_q[1] | Fin_occ_var[, "npp"] >= npp_q[2]),]
-    
-    # Plot
-    
-    # jpeg("output/InOut_convexhull_2,5per.jpeg", width = 15, height = 8.5, units = "in", res = 500)
-    temp_raster <- Rastack[[1]]
-    temp_raster[!is.na(temp_raster)] <- 1
-    
-    plot(temp_raster, col = "lightgrey", legend = FALSE)
-    points(bio5_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "red")
-    points(hurs_min_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "blue")
-    points(globalCropland_2010CE_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "orange")
-    points(npp_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "green")
-    
-    legend("left", legend = c("bio5", "hurs_min", "Cropland", "NPP"),
-           col = c("red", "blue", "orange", "green"), pch = 20, cex = 0.8)
-    
-    
+    # # globalCropland_2010CE
+    # globalCropland_2010CE_q <- quantile(Fin_occ_var$globalCropland_2010CE, probs = c(0.005, 0.95))
+    # globalCropland_2010CE_ext <- Fin_occ_var[which(Fin_occ_var[, "globalCropland_2010CE"] <= globalCropland_2010CE_q[1] | Fin_occ_var[, "globalCropland_2010CE"] >= globalCropland_2010CE_q[2]),]
+    # 
+    # # npp
+    # npp_q <- quantile(Fin_occ_var$npp, probs = c(0.005, 0.95))
+    # npp_ext <- Fin_occ_var[which(Fin_occ_var[, "npp"] <= npp_q[1] | Fin_occ_var[, "npp"] >= npp_q[2]),]
+    # 
+    # 
+    # # Plot
+    # jpeg("output/Outliers_2,5per.jpeg", width = 15, height = 8.5, units = "in", res = 500)
+    # temp_raster <- Rastack[[1]]
+    # temp_raster[!is.na(temp_raster)] <- 1
+    # 
+    # plot(temp_raster, col = "lightgrey", legend = FALSE)
+    # points(bio5_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "red")
+    # points(bio6_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "black")
+    # points(hurs_min_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "blue")
+    # points(globalCropland_2010CE_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "orange")
+    # points(npp_ext[, c("x", "y")], pch = 20, cex = 0.5, col = "green")
+    # 
+    # legend("right", legend = c("bio5", "bio6", "hurs_min", "Cropland", "NPP"),
+    #        col = c("red", "black", "blue", "orange", "green"), pch = 20, cex = 0.8)
     # dev.off()
     
-    
+    ####################################
     
     # Select for each variable 2.5% of the lower extreme and 2.5% of the higher extreme
     outs <- lapply(colnames(var.occ_2), function(x, df)
@@ -156,9 +175,32 @@ for (i in 1:length(Vect_Sp)) {
     cur.sp.pixels.filt <- cur.sp.pixels[-outs,]
     
     
+    ### Occurrences position from the convexhull
+    outconv <- Fin_occ_var[outs,]
+    nrow(outconv)
+    inconv <- Fin_occ_var[-outs,]
+    nrow(inconv)
+    
+    # Create a temporary dataframe
+    out_in_ConvHull <- data.frame(Species = Sp, 
+                                  NbOcc_InConv = nrow(inconv), 
+                                  NbOcc_OutConv = nrow(outconv),
+                                  stringsAsFactors = FALSE)
+    
+    # Append to the main dataframe
+    out_in_ConvHull_All <- rbind(out_in_ConvHull_All, out_in_ConvHull)
+    
+    ### If visualization is needed
+    # jpeg("output/InOut_convexhull_2,5per.jpeg", width = 15, height = 8.5, units = "in", res = 500)
+    # plot(Rastack[[1]])
+    # points(inconv[, c("x", "y")], pch = 20, cex = 0.5, col = "blue")
+    # points(outconv[, c("x", "y")], pch = 20, cex = 0.5, col = "red")
+    # dev.off()
+    
+    
     ### 3.2 Convex Hull creation
     
-    if(nrow(cur.sp.pixels.filt) >= 5){  # If there is enough points we use occurrence without outliers
+    if(nrow(cur.sp.pixels.filt) >= 6){  # If there is enough points we use occurrence without outliers
       # else we use all occurrences
       cursp.convhull <- geometry::convhulln(cur.sp.pixels.filt,
                                             # options = "Qt"
@@ -173,7 +215,7 @@ for (i in 1:length(Vect_Sp)) {
     
     
     # Save ConvexHull
-    saveRDS(cursp.inhull, paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
+    saveRDS(cursp.inhull, paste0("data/convexhull/", Sp, "_cursp.inhull_HumanPop.rds"))
     
     ## ConvexHull data Visualisation
     # plot(Rastack[[1]])
@@ -189,31 +231,9 @@ for (i in 1:length(Vect_Sp)) {
     #It returns a logical vector (TRUE or FALSE), indicating whether each element in the first vector is found in the second vector
     
     # Save ConvexHull
-    saveRDS(presencepixels, paste0("data/convexhull/", Sp, "_presencepixels.rds"))
+    saveRDS(presencepixels, paste0("data/convexhull/", Sp, "_presencepixels_HumanPop.rds"))
     
-    # Final dataframe of occurences and their respective variable values
-    Fin_occ_var <- cbind(Occu_2, var.occ_2)
-    Fin_occ_var <- Fin_occ_var %>%
-      dplyr::select(-ID)
-    
-    outconv <- Fin_occ_var[outs,]
-    nrow(outconv)
-    inconv <- Fin_occ_var[-outs,]
-    nrow(inconv)
 
-    jpeg("output/InOut_convexhull_2,5per.jpeg", width = 15, height = 8.5, units = "in", res = 500)
-    plot(Rastack[[1]])
-    points(inconv[, c("x", "y")], pch = 20, cex = 0.5, col = "blue")
-    points(outconv[, c("x", "y")], pch = 20, cex = 0.5, col = "red")
-    dev.off()
-    
-    
-    # Save occurrences to an Excel file
-    if(!dir.exists("data/filtered_occurences")) {
-      dir.create("data/filtered_occurences,")
-    }
-    xlsx::write.xlsx(Fin_occ_var, paste0("data/filtered_occurences/Occ&Var_final_15", Sp, ".xlsx"), row.names = F)
-    
     ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
     ############# 4. Data visualization
@@ -279,21 +299,21 @@ for (i in 1:length(Vect_Sp)) {
     # 
     ## 4.2 Environmental range
     
-    # Reshape the data into long format for ggplot
+    # # Reshape the data into long format for ggplot
     var.occ_2_long <- var.occ_2[, -1] %>%
       tidyr::pivot_longer(cols = everything(), names_to = "Variable", values_to = "Values")
-    
+
     # Create a list to store each ggplot
     plot_list <- list()
     # Define a list of colors for each variable
-    colors <- c("bio5" = "brown",   
-                "hurs_min" = "#2BDBCA", 
+    colors <- c("bio5" = "brown",
+                "hurs_min" = "#2BDBCA",
                 "npp" = "green4",
                 "bio6" = "black",
                 # "Human_pop_2000" = "#8494FF",
                 # "Human_footprint" = "blue",
-                "globalCropland_2010CE" = "#E68613")  
-     
+                "globalCropland_2010CE" = "#E68613")
+
     # Loop over each environmental variable and create a boxplot for each
     for (var in unique(var.occ_2_long$Variable)) {
       plot_obj <- ggplot(var.occ_2_long[var.occ_2_long$Variable == var, ], aes(x = Variable, y = Values)) +
@@ -309,14 +329,14 @@ for (i in 1:length(Vect_Sp)) {
       # Add the plot to the list
       plot_list[[var]] <- plot_obj
     }
-    # 
+    #
     # Arrange all the plots in a grid
     all_plots <- grid.arrange(grobs = plot_list, ncol = 3,
                               top = Sp)
     # # Save the grid to a PNG file
-    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
-    # 
-    ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
+    ggsave(paste0("output/Filt_occurrences_plot/Variable_response_HumanPop", Sp, ".png"), plot = all_plots, width = 10, height = 8, dpi = 300)
+    #
+    # ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### ##### #####
     
     } else {
       # Stop the script if the number of rows in Occu is not greater than 60
@@ -324,3 +344,4 @@ for (i in 1:length(Vect_Sp)) {
     }
 }
 
+# xlsx::write.xlsx(out_in_ConvHull_All, paste0("output/ConvehullData.xlsx"), row.names = F)
