@@ -99,17 +99,17 @@ completed_species <- if (file.exists(log_file)) {
 }
 
 
-for (i in 1:length(Vect_Sp)){
+for (i in 5:length(Vect_Sp)){
   Sp <- Vect_Sp[i] # Current species
   
-  # Check if the species is already processed
-  if (sp %in% completed_species) {
-    message(sprintf("Skipping %s: already completed.", Sp))
-    next
-  }
-  
+  # # Check if the species is already processed
+  # if (Sp %in% completed_species) {
+  #   message(sprintf("Skipping %s: already completed.", Sp))
+  #   next
+  # }
+  # 
   # Progress message
-  message(sprintf("Processing %s (%d/%d)...", Sp, i, length(Vect_Sp)))
+  # message(sprintf("Processing %s (%d/%d)...", Sp, i, length(Vect_Sp)))
   
   
   # Download species occurrences from GBIF
@@ -126,7 +126,7 @@ for (i in 1:length(Vect_Sp)){
   xlsx::write.xlsx(Occu, paste0("data/raw/occurences/Occurences_", Sp, ".xlsx"), row.names = FALSE)
   
   # Append the species to the completion log
-  write(sp, file = log_file, append = TRUE)
+  # write(sp, file = log_file, append = TRUE)
   
-  message(sprintf("Completed %s.", sp))
+  # message(sprintf("Completed %s.", Sp))
 }

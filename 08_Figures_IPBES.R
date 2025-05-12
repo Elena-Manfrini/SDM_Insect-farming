@@ -5,8 +5,8 @@ library(sf)
 library(terra)
 library(dplyr)
 library(tidyr)
-library(httr) # to download data off of Zenodo
-library(rnaturalearth) # download ocean data from natural earth 
+library(httr) 
+library(rnaturalearth)
 library(ggplot2)
 library(viridis)
 
@@ -19,201 +19,171 @@ if(!dir.exists("data/IPBES_SubRegions")) {
 }
 
 
-################### 1. IPBES Regions 
+################### 1. IPBES Regions download ###################
 
-### 1.a Download IBPES file
+### 1.a Download IPBES file
+# Uncomment the following lines to download and unzip the IPBES file
 # adresse <- "https://zenodo.org/records/5719431/files/ipbes_regions_subregions_shape_1.1.zip?download=1"
-# download <- download.file(adresse, destfile = "data/IPBES_SubRegions/ipbes_subregions.zip", mode = "wb")
-# IPBES_folder <- "data/IPBES_SubRegions/ipbes_subregions.zip"
-# unzip(IPBES_folder, exdir = "data/IPBES_SubRegions")
-
+# download.file(adresse, destfile = "data/IPBES_SubRegions/ipbes_subregions.zip", mode = "wb")
+# unzip("data/IPBES_SubRegions/ipbes_subregions.zip", exdir = "data/IPBES_SubRegions")
 
 ### 1.b Match IPBES and Raster format
 
-### IPBES
-IPBES_raw <- sf::st_read("data/IPBES_SubRegions/IPBES_Regions_Subregions2.shp") # Shapefile
+# # Load IPBES shapefile
+IPBES_raw <- st_read("data/IPBES_SubRegions/IPBES_Regions_Subregions2.shp")
 
-# Match CRS : WGS 84 (EPSG:4326)
+# Transform IPBES CRS to match the raster CRS
 IPBES_CRS <- st_transform(IPBES_raw, crs = st_crs(Rastack[[1]]))
 
-# Crop and align the extent
-# Convert to spat vector 
+# Convert to spatial vector and crop to raster extent
 IPBES_vect <- vect(IPBES_CRS)
-
-# Crop to raster extent
 IPBES_crop <- crop(IPBES_vect, Rastack[[1]])
 
-# Get column names (excluding geometry),
-attribute_columns <- c("ISO_3", "Area","Sub_Region")
+# Define attribute columns to rasterize
+attribute_columns <- c("ISO_3", "Area", "Sub_Region")
 
-# Create a blank raster template with the same dimensions and resolution
+# Create a blank raster template
 shape_raster <- rast(Rastack[[1]])
 
-# Rasterize each column and stack them
+# Rasterize each attribute column and stack them
 IPBES_list <- lapply(attribute_columns, function(col) {
   rasterize(IPBES_crop, shape_raster, field = col)
 })
 
-# Create a SpatRaster stack
+# # Create a SpatRaster stack
 IPBES_stack <- rast(IPBES_list)
 
-# Save the final raster stack with all variables
-writeRaster(IPBES_stack, filename = "data/IPBES.tif",overwrite = TRUE)
+# # Save the final raster stack
+writeRaster(IPBES_stack, filename = "data/IPBES.tif", overwrite = TRUE)
 
-
-
-
-############## Figures ##############
 
 IPBES_stack <- rast("data/IPBES.tif")
+
+### 1.c IPBES Regions & Subregions
+
+# Convert raster to data frame for IPBES SubRegions
+IPBES_df <- as.data.frame(IPBES_stack, xy = TRUE)
+IPBES_df <- IPBES_df[,-c(3)]
+
+# Create a new column "Regions" based on "Sub_Region"
+IPBESReg <- IPBES_df %>%
+  mutate(Regions = case_when(
+    grepl("america", Sub_Region, ignore.case = TRUE) | Sub_Region == "Caribbean" ~ "Americas",
+    grepl("africa", Sub_Region, ignore.case = TRUE) ~ "Africa",
+    grepl("asia", Sub_Region, ignore.case = TRUE) | Sub_Region == "Oceania" ~ "Asia and the Pacific",
+    grepl("europe", Sub_Region, ignore.case = TRUE) | Sub_Region == "North East Asia" ~ "Europe and Central Asia",
+    TRUE ~ NA_character_  
+  ))
+
+
+################ 2. Figure preparation
+
+### 2.1 Data Preparation
+
+IPBES_unique <- unique(IPBESReg[,c(3,4,5)])
+
+
+# Step 1: Sort by the first column (Area)
+IPBES_unique <- IPBES_unique %>%
+  arrange(Regions)
+
+# Step 2: Sort by the second column (Sub_Region) within the fixed order of the first column
+IPBES_unique <- IPBES_unique %>%
+  arrange(Regions, Sub_Region)
+
+# Step 3: Sort by the third column (Regions) within the fixed order of the first two columns
+IPBES_unique <- IPBES_unique %>%
+  arrange(Regions, Sub_Region, Area)
+
+IPBES_unique <- IPBES_unique %>%
+  arrange(3, 2, 1)
+
+## Dataframe for Countries
+IPBESCountry_all <- IPBES_unique
+## Dataframe for subregions
+IPBESubReg_all <- IPBES_unique
+## Dataframe for regions
+IPBESReg_all <- IPBES_unique
 
 # Upload Species name
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
-### Convert raster to data frame
-### IPBES Subregions
-IPBESubReg <- as.data.frame(IPBES_stack[[3]], xy = TRUE)
 
-### IPBES Countries
-# Convert raster to data frame for plotting
-IPBEScountry <- as.data.frame(IPBES_stack[[2]], xy = TRUE)
-
-  
-i <- 1
-IPBESClass_all <- IPBESubReg
-IPBEScountry_all <- IPBEScountry
 Species_class <- data.frame()
+raster_list <- list()
 
-# Loop over each species to process occurrence data
-for (i in 1:7) {
+# # Loop over each species to process occurrence data
+for (i in  1:7) {
   Sp <- Vect_Sp[[i]] # Get the current species name.
   
-  
-  
-  #################### 2 Suitability  
-  
-  
-  ## 2.a. Per Country
-  
-  ## Load raster of suitability
-  Projection_ens <- readRDS(file = paste0("output/Suitability/", Sp, "_ens_mod_15.rds"))
-  
-  suit_df <- as.data.frame(Projection_ens, xy = TRUE)
-  
-  IPBESCountry_Suit <- merge(suit_df,IPBEScountry, by = c("x","y"))
-  
-  col_name <- paste0("SuitCountry_", Sp)
-  
-  mean_suit_by_country <- IPBESCountry_Suit %>%
-    group_by(Area) %>%
-    summarise(!!col_name := mean(Suitability, na.rm = TRUE))
-  
-  IPBES_SuitCountry_df <- IPBEScountry %>%
-    left_join(mean_suit_by_country, by = "Area")
-  
-  
-  plot_raster_Suit_Country <- ggplot() +
-    geom_tile(data = IPBES_SuitCountry_df, aes(x = x, y = y, fill = !!sym(col_name))) +
-    scale_fill_viridis(name = "Mean Suitability", option = "D", direction = 1) +  
-    coord_equal() +  # Keep proportions
-    theme_minimal() +  
-    labs(title = "Suitability per countries",
-         subtitle = Sp
-    ) +
-    theme(
-      plot.title = element_text(size = 18, face = "bold"),
-      plot.subtitle = element_text(size = 14, face = "italic"),
-      axis.title = element_blank(),
-      axis.text = element_text(color = "gray50"),
-      legend.position = "right",
-      legend.key.height = unit(1, "cm"))
-  
-  # Save the plot
-  ggsave(
-    paste0("figures/", Sp,"/Suitability_per_country.jpeg",sep=""),
-    plot_raster_Suit_Country ,
-    dpi = 500,
-    bg = NULL,
-    width = 15,
-    height = 8.5,
-    units = "in"
-  )
-  
-  
-  
-  ## 2.b IPBES regions
-  
-  IPBES_Sub_Suit <- merge(suit_df,IPBESubReg, by = c("x","y"))
-  
-  col_name <- paste0("Suitability_", Sp)
-  
-  mean_suit_by_Subregion <- IPBES_Sub_Suit %>%
-    group_by(Sub_Region) %>%
-    summarise(!!col_name := mean(Suitability, na.rm = TRUE))
-  
-  IPBES_Suit_df <- IPBESubReg %>%
-    left_join(mean_suit_by_Subregion, by = "Sub_Region")
-  
-  
-  plot_raster_Suit_Subregions <- ggplot() +
-    geom_tile(data = IPBES_Suit_df, aes(x = x, y = y, fill = !!sym(col_name))) +
-    scale_fill_viridis(name = "Mean Suitability", option = "D", direction = 1) +  
-    coord_equal() +  # Keep proportions
-    theme_minimal() +  
-    labs(title = "Suitability Raster per IPBES Subregions",
-         subtitle = Sp
-    ) +
-    theme(
-      plot.title = element_text(size = 18, face = "bold"),
-      plot.subtitle = element_text(size = 14, face = "italic"),
-      axis.title = element_blank(),
-      axis.text = element_text(color = "gray50"),
-      legend.position = "right",
-      legend.key.height = unit(1, "cm"))
-  
-  # Save the plot
-  ggsave(
-    paste0("figures/", Sp,"/Suitability_per_Subregions.jpeg",sep=""),
-    plot_raster_Suit_Subregions,
-    dpi = 500,
-    bg = NULL,
-    width = 15,
-    height = 8.5,
-    units = "in"
-  )
-  
-  
-  
-  #################### 3 Class projection
-  
+  #### Class Projection
   
   # Read class projections
-  Class_projection <- readRDS(file = paste0("output/suitability/", Sp, "_class_ens_mod_15.rds"))
+  Class_projection <- rast(paste0("output/Suitability/", Sp, "_class_ens_mod.tif"))
+  
+  raster_list[[Sp]] <- Class_projection
+  
+  Class_projection <- as.data.frame(Class_projection, xy = TRUE)
   
   
-  ##### 3.a Country
-  
-  ## Merge the two dataframes
-  Class_IPBES_Country <- merge(Class_projection,IPBEScountry, by = c("x","y"))
+  #### Merge IPBES and Class projection by coordinates
+  Class_IPBES <- merge(Class_projection,IPBESReg, by = c("x","y"), all.y = TRUE)
   
   
-  ##### 3.a.1. Number of country per category (low, intermediate, high) (Dataframe)
+  ### 2.1 Data preparation for country
   
-  # Keep only Countries and Suitability Classes
-  Class_IPBES_Country_sp <- Class_IPBES_Country[,-c(1,2)]
-  # As factor Suitability Classes
-  Class_IPBES_Country_sp$Suitability <- as.factor(Class_IPBES_Country_sp$Suitability)
+  # Keep only Countries and Risk Classes
+  Class_IPBES_Country_sp <- Class_IPBES_Reg[,c(3,4)]
+  
+  # Ensure Suitability is treated as a character (not a factor)
+  Class_IPBES_Country_sp$Suitability <- as.character(Class_IPBES_Country_sp$Suitability)
+  
+  
+  ## A : Percentage of risk categories per country
+  
+  ## Calculate total count per area
+  Perc_suit_Country <- Class_IPBES_Country_sp %>%
+    group_by(Area, Suitability) %>%
+    summarise(Count = n(), .groups = "drop") %>% ### Column which count the number of rows per suitablity category for each Area
+    group_by(Area ) %>%
+    mutate(Percentage = (Count / sum(Count)) * 100) %>% ### Percentage of each category per Area
+    select(-Count) %>% # Remove the column
+    pivot_wider(names_from = Suitability, values_from = Percentage, values_fill = 0) ## Suitability in column
+  
+  Perc_suit_Country <- Perc_suit_Country %>%
+    rename_with(~ paste0(c("Low_risk_", "Intermediate_risk_", "High_risk_"), Sp), .cols = c("0", "0.5", "1"))
+  
+  # Dataframe of suitability class percentages per species per Subregions
+  IPBESCountry_all <- merge(IPBESCountry_all, Perc_suit_Country, by = "Sub_Region")
+  
+  
+  ## B : Most frequent risk class per country
+  
+  # Attribute the most frequent risk class per country
+  # Then, count the number of country in each category
+  
   
   # Add a column indicating the most frequently occurring Suitability category.
-  Class_IPBES_Country_sp_test <- Class_IPBES_Country_sp %>%
+  col_name <- paste0("Most_Frequent_Suitability_", Sp)
+  
+  Class_IPBES_Country_sp_freq <- Class_IPBES_Country_sp %>%
     group_by(Area) %>%
-    mutate(Most_Frequent_Suitability = factor(Suitability[which.max(tabulate(match(Suitability, unique(Suitability))))], 
-                                              levels = levels(Suitability))) %>%
+    mutate(!!col_name := factor(Suitability[which.max(tabulate(match(Suitability, unique(Suitability))))],
+                                levels = levels(Suitability))) %>%
     ungroup()
   
-  # Keep only one country row
-  unique_country <- unique(Class_IPBES_Country_sp_test[,c(2,3)])
+  # Keep only one row per country
+  unique_country <- unique(Class_IPBES_Country_sp_freq[,c(2,3)])
+  
+  # Dataframe of suitability class percentages per species per Subregions
+  IPBESCountry_all <- merge(IPBESCountry_all, unique_country, by = "Area")
+  
+  
+  ###### Arrange for plotting 
+  
+  #### Most frequent risk class per country
+  colnames(unique_country) <- c("Area", "Most_Frequent_Suitability")
   
   # Number of country per suitability category
   Nb_country_per_Suit_cat <- unique_country %>%
@@ -229,148 +199,122 @@ for (i in 1:7) {
     mutate(Species = Sp) %>%
     select(Species, everything())  # Moves "Species" to the first column
   
-  
-  Species_class <- rbind (Species_class,Nb_country_per_Suit_cat)
-  
-  
-  ##### 3.a.2. Map of High suitability percentage 
-  
-  ### Colname by species
-  col_name <- paste0("PercHighSuit_", Sp)
-  
-  # Calculate percentage of High suitability per subregions
-  percentage <- Class_IPBES_Country %>%
-    group_by(Area) %>%
-    summarise(!!col_name := sum(Suitability == 1, na.rm = TRUE) / n() * 100)
-  
-  # Merge percentage with initial IPBES dataframe
-  IPBES_class_Country <- IPBEScountry %>%
-    left_join(percentage, by = "Area")
-  
-  # Plot results
-  plot_class_high_country <- ggplot() +
-    geom_tile(data = IPBES_class_Country, aes(x = x, y = y, fill = !!sym(col_name))) +
-    scale_fill_viridis(name = "Percentage of High Suitability", option = "C", direction = 1) +  
-    coord_equal() +  # Keep proportions
-    theme_minimal() +  
-    labs(title = "High suitability class per IPBES country",
-         subtitle = Sp
-    ) +
-    theme(
-      plot.title = element_text(size = 18, face = "bold"),
-      plot.subtitle = element_text(size = 14, face = "italic"),
-      axis.title = element_blank(),
-      axis.text = element_text(color = "gray50"),
-      legend.position = "right",
-      legend.key.height = unit(1, "cm"))
-  
-  # Save the plot
-  ggsave(
-    paste0("figures/", Sp,"/HighSuitpercentage_per_country.jpeg",sep=""),
-    plot_class_high_country ,
-    dpi = 500,
-    bg = NULL,
-    width = 15,
-    height = 8.5,
-    units = "in"
-  )
+  # Number of county per suitability class per species
+  Species_class <- rbind(Species_class,Nb_country_per_Suit_cat)
   
   
-  ## 3.a.2 IPBES regions
   
-  Class_IPBES_SuReg <- merge(Class_projection,IPBESubReg, by = c("x","y"))
+  ### 2.2 Data preparation for IPBES SubRegions
+  ## Percentage of suitability classes per SubRegions
   
-  col_name <- paste0("PercHighSuit_", Sp)
+  Class_IPBES_Region_sp <- Class_IPBES_Reg[,c(3,5)]
   
-  mean_suit_by_Subregion <- Class_IPBES_SuReg %>%
+  ## Ensure Suitability is treated as a character (not a factor)
+  Class_Region_sp <- Class_IPBES_Region_sp
+  Class_Region_sp$Suitability <- as.character(Class_Region_sp$Suitability)
+  
+  ## Calculate total count per area
+  Perc_suit_SubRegion <- Class_Region_sp %>%
+    group_by(Sub_Region, Suitability) %>%
+    summarise(Count = n(), .groups = "drop") %>% ### Column which count the number of rows per suitablity category for each Area
     group_by(Sub_Region) %>%
-    summarise(!!col_name := mean(Suitability, na.rm = TRUE))
+    mutate(Percentage = (Count / sum(Count)) * 100) %>% ### Percentage of each category per Area
+    select(-Count) %>% # Remove the column
+    pivot_wider(names_from = Suitability, values_from = Percentage, values_fill = 0) ## Suitability in column
   
-  IPBES_Suit_df <- IPBESubReg %>%
-    left_join(mean_suit_by_Subregion, by = "Sub_Region")
+  Perc_suit_SubRegion <- Perc_suit_SubRegion %>%
+    rename_with(~ paste0(c("Low_risk_", "Intermediate_risk_", "High_risk_"), Sp), .cols = c("0", "0.5", "1"))
+  
+  # Dataframe of suitability class percentages per species per Subregions
+  IPBESubReg_all <- merge(IPBESubReg_all, Perc_suit_SubRegion, by = "Sub_Region")
   
   
-  plot_raster_Class_Subregions <- ggplot() +
-    geom_tile(data = IPBES_Suit_df, aes(x = x, y = y, fill = !!sym(col_name))) +
-    scale_fill_viridis(name = "Percentage of High Suitability", option = "C", direction = 1) +  
-    coord_equal() +  # Keep proportions
-    theme_minimal() +  
-    labs(title = "High suitability class per IPBES Subregions",
-         subtitle = Sp
-    ) +
-    theme(
-      plot.title = element_text(size = 18, face = "bold"),
-      plot.subtitle = element_text(size = 14, face = "italic"),
-      axis.title = element_blank(),
-      axis.text = element_text(color = "gray50"),
-      legend.position = "right",
-      legend.key.height = unit(1, "cm"))
   
-  # Save the plot
-  ggsave(
-    paste0("figures/", Sp,"/HighSuitpercentage_per_Subregions.jpeg",sep=""),
-    plot_raster_Class_Subregions,
-    dpi = 500,
-    bg = NULL,
-    width = 15,
-    height = 8.5,
-    units = "in"
-  )
+  ### 2.3 Data preparation for IPBES Regions
+  ## Percentage of suitability classes per Regions
   
-  ## 3.a.3 Combine High suitability class of all species
+  # Calculate total count per area
+  Perc_suit_Region <- Class_Region_sp %>%
+    group_by(Regions, Suitability) %>%
+    summarise(Count = n(), .groups = "drop") %>% ### Column which count the number of rows per suitablity category for each Area
+    group_by(Regions) %>%
+    mutate(Percentage = (Count / sum(Count)) * 100) %>% ### Percentage of each category per Area
+    select(-Count) %>% # Remove the column
+    pivot_wider(names_from = Suitability, values_from = Percentage, values_fill = 0) ## Suitability in column
   
-  ## Bind with IPBESClass_F_all dataframe to combine percentage of all species
-  final_IPBES <- IPBES_Suit_df[,-c(3)]
-  IPBESClass_all <- merge(IPBESClass_all, final_IPBES, by = c("x","y"))
+  Perc_suit_Region <- Perc_suit_Region %>%
+    rename_with(~ paste0(c("Low_risk_", "Intermediate_risk_", "High_risk_"), Sp), .cols = c("0", "0.5", "1"))
+  
+  # Add new column and assign name separately
+  IPBESReg_all <- merge(IPBESReg_all, Perc_suit_Region, by = "Regions")
   
 }
 
-##### REF 3.a.1. Save data frame of Country number and Suitability category of all species
+##### Save data frames
+### Number of countries per suitability class for all species
+Species_class <- as.data.frame(Species_class)
 
-xlsx::write.xlsx(Species_class, paste0("data/NbCountry-per-suitCat_All-sp.xlsx"), row.names = F)
+xlsx::write.xlsx(Species_class, "data/NbCountry-per-suitCat_All-sp.xlsx", row.names = F)
+
+### Percentage of class category for all countries per species
+xlsx::write.xlsx(IPBESCountry_all, "data/Perc-suitCat_percountry_All-sp.xlsx", row.names = F)
+
+### Percentage of class category for all Subregions per species
+xlsx::write.xlsx(IPBESubReg_all, "data/Perc-suitCat_perSubRegions_All-sp.xlsx", row.names = F)
+
+### Percentage of class category for all Regions per species
+xlsx::write.xlsx(IPBESReg_all, "data/Perc-suitCat_perRegions_All-sp.xlsx", row.names = F)
 
 
+################ 2. Figures
+
+######## Figure 3 : Number of countries in each invasion risk category
+
+Species_class <- read.xlsx("data/NbCountry-per-suitCat_All-sp.xlsx")
+
+colnames(Species_class) <- sub(paste0("_risk"), "", colnames(Species_class))
+Species_class <- Species_class[,c(1,4,3,2)]
+
+reshaped_data <- Species_class %>%
+  pivot_longer(
+    cols = starts_with("High") | starts_with("Intermediate") |  starts_with("Low") ,
+    names_to = "Risk_Level",
+    values_to = "number"
+  )
+
+desired_orders <- rev(c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
+                        "Alphitobius diaperinus", "Musca domestica", 
+                        "Gryllodes sigillatus", "Locusta migratoria"))
+
+reshaped_data$Species <- factor(reshaped_data$Species, levels = desired_orders)
+reshaped_data_ordered <- reshaped_data[order(reshaped_data$Species), ]
 
 
-#################### 4. High suitability of all species
-
-IPBESClass_all_mean <- IPBESClass_all %>%
-  mutate(Mean_HighSuit = rowMeans(select(., starts_with("PercHighSuit"))))
-
-IPBESClass_all_Fin <- IPBESClass_all_mean %>%
-  mutate(Max_Suitability_Species = apply(select(., starts_with("PercHighSuit")), 1, function(x) names(x)[which.max(x)])) %>%
-  mutate(Max_Suitability_Species = gsub("PercHighSuit_", "", Max_Suitability_Species))
-
-## 4.1 Map of species with the highest suitability per subregions 
-
-plot_Species<- ggplot() +
-  geom_tile(data = IPBESClass_all_Fin, aes(x = x, y = y, fill = Max_Suitability_Species)) +
-  scale_fill_manual( values = c("Hermetia illucens" = "#009688",
-                     "Tenebrio molitor" =  "#673ab7",
-                     "Acheta domesticus" = "#FFC107", 
-                     "Alphitobius diaperinus" = "#FFA000",
-                     "Musca domestica" = "#00796b",
-                     "Gryllodes sigillatus" = "#ffecb3",
-                     "Locusta migratoria" = "#ffeb3b",
-                     "Gryllus assimilis" = "#9c27b0"),
-    name = "Species") +
-  # scale_fill_viridis(name = "Species with the highest suitability per Subregions", option = "C", direction = 1) +  
-  coord_equal() +  # Keep proportions
-  theme_minimal() +  
-  labs(title = "Species with the highest suitability per Subregions"
+# Create the bar chart
+histspnbcountry <- ggplot(reshaped_data, aes(x = Species, y = number, fill = Risk_Level)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_manual(
+    name = "Risk",
+    values = c("High" = "darkred", "Intermediate" = "#F19134", "Low" = "#F5E8C2")
   ) +
   theme(
-    plot.title = element_text(size = 18, face = "bold"),
-    plot.subtitle = element_text(size = 14, face = "italic"),
-    axis.title = element_blank(),
-    axis.text = element_text(color = "gray50"),
-    legend.position = "right",
-    legend.key.height = unit(1, "cm"))
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Adjust size for x-axis text
+    axis.text.y = element_text(size = 12),                       # Adjust size for y-axis text
+    axis.title = element_text(size = 14),                         # Adjust size for axis titles
+    legend.text = element_text(size = 12)                     # Adjust size for legend title
+  ) +
+  labs(
+    x = "Species",
+    y = "Number of country",
+    fill = "Risk Level"
+  )
 
-# Save the plot
+
 ggsave(
-  paste0("figures/SpeciesName_HighestSuitability.jpeg",sep=""),
-  plot_Class_Subregions_allsp,
+  paste0("figures/NbCountryRisk.jpeg",sep=""),
+  histspnbcountry,
   dpi = 500,
   bg = NULL,
   width = 15,
@@ -378,39 +322,293 @@ ggsave(
   units = "in"
 )
 
-## 4.2 Map of High suitability percentage mean of all species
 
-plot_Class_Subregions_allsp <- ggplot() +
-  geom_tile(data = IPBESClass_all_Fin, aes(x = x, y = y, fill = Mean_HighSuit)) +
-  scale_fill_viridis(name = "Percentage of High Suitability", option = "C", direction = 1) +  
-  coord_equal() +  # Keep proportions
-  theme_minimal() +  
-  labs(title = "Mean High suitability class per IPBES Subregions for all species"
-  ) +
-  theme(
-    plot.title = element_text(size = 18, face = "bold"),
-    plot.subtitle = element_text(size = 14, face = "italic"),
-    axis.title = element_blank(),
-    axis.text = element_text(color = "gray50"),
-    legend.position = "right",
-    legend.key.height = unit(1, "cm"))
 
-# Save the plot
-ggsave(
-  paste0("figures/HighSuitpercentage_per_Subregions_allsp.jpeg",sep=""),
-  plot_Class_Subregions_allsp,
-  dpi = 500,
-  bg = NULL,
-  width = 15,
-  height = 8.5,
-  units = "in"
-)
+######## Figure 4 : Percentage of invasion risk of all IPBES sub-regions.
 
-## 4.3 Dataframe High suitability for all species
+IPBESReg_all <- IPBESReg_all[,-c(1)]
+IPBESReg_unique <- IPBESReg_all[!duplicated(IPBESReg_all$Sub_Region), ]
 
-IPBES_SubR_Species <- IPBESClass_all_Fin[,-c(1,2)]
-IPBES_SubR_Species.unique <- IPBES_SubR_Species[-which(duplicated(IPBES_SubR_Species)), ] 
+SubRegions <- read.xlsx("data/Perc-suitCat_perSubRegions_All-sp.xlsx")
+SubRegions <- merge(SubRegions,IPBESReg_unique, by = "Sub_Region", all.x = TRUE)
+# Step 1: Sort by the first column (Area)
+SubRegions <- SubRegions %>%
+  arrange(Regions)
+# Step 2: Sort by the second column (Sub_Region) within the fixed order of the first column
+SubRegions <- SubRegions %>%
+  arrange(Regions, Sub_Region)
 
-xlsx::write.xlsx(IPBES_SubR_Species.unique, paste0("data/Per_per_SubRegion_All-sp.xlsx"), row.names = F)
 
+Vect_Sp <- c("Hermetia.illucens", "Tenebrio.molitor", "Acheta.domesticus", 
+             "Alphitobius.diaperinus", "Musca.domestica", 
+             "Gryllodes.sigillatus", "Locusta.migratoria")
+
+Vect_Sp_file <- c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
+                  "Alphitobius diaperinus", "Musca domestica", 
+                  "Gryllodes sigillatus", "Locusta migratoria")
+
+for (i in  1:length(Vect_Sp)) {
+  sp <- Vect_Sp[[i]]
   
+  Sp <- Vect_Sp_file[[i]]
+  
+  # Create a subset of the dataframe
+  subset_data <- SubRegions  %>%
+    select(Sub_Region, contains(sp))
+  
+  colnames(subset_data) <- sub(paste0("_risk_", sp), "", colnames(subset_data))
+  
+  
+  desired_orders <-  rev(c(
+    "North America",
+    "Caribbean",
+    "Mesoamerica",
+    "South America",
+    "Eastern Europe",
+    "Central and Western Europe",
+    "North Africa",
+    "Central Africa",
+    "West Africa",
+    "East Africa and adjacent islands",
+    "Southern Africa",
+    "Western Asia",
+    "North-East Asia",
+    "Central Asia",
+    "South-East Asia",
+    "South Asia",
+    "Oceania"
+  ))
+  
+  reshaped_data <- subset_data %>%
+    pivot_longer(
+      cols = starts_with("Low") | starts_with("Intermediate") | starts_with("High"),
+      names_to = "Risk_Level",
+      values_to = "Percentage"
+    )
+  
+  
+  reshaped_data$Sub_Region <- factor(reshaped_data$Sub_Region, levels = desired_orders)
+  reshaped_data_ordered <- reshaped_data[order(reshaped_data$Sub_Region), ]
+  
+  reshaped_data_ordered$Sub_Region <- factor(reshaped_data_ordered$Sub_Region, levels = unique(reshaped_data_ordered$Sub_Region))
+  
+  
+  # Create the stacked bar plot
+  histSubReg <- ggplot(reshaped_data_ordered, aes(x = Sub_Region, y = Percentage, fill = Risk_Level)) +
+    geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+    theme_minimal() +
+    coord_flip() +
+    scale_fill_manual(
+      name = "Risk",
+      values = c("Low" = "#F5E8C2", "Intermediate" = "#F19134", "High" = "darkred")
+    ) +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    labs(
+      title = "Invasion Risk Levels of Hermetia illucens by SubRegions",
+      x = "Country",
+      y = "Percentage",
+      fill = "Risk Level"
+    )
+  
+  ggsave(
+    paste0("figures/", Sp, "/SubRegionspercentage.jpeg",sep=""),
+    histSubReg,
+    dpi = 500,
+    bg = NULL,
+    width = 40,
+    height = 40,
+    units = "in"
+  )
+}
+
+
+################ 3. Insect farms
+
+
+### Invasion risk of all species
+
+Class <- rast(raster_list)
+Class_df <- as.data.frame(Class, xy = TRUE)
+
+
+#### 3.1 Insect farm data preparation
+
+Farms <- read_excel("data/Insect_farms.xlsx", 
+                    sheet = "Final")
+
+# NA deletion
+Farms <- Farms[!is.na(Farms$`Coordonate Lat/Long`), ]
+
+# Separate lat and long coordinates into 2 columns
+Farms <- Farms %>%
+  separate(`Coordonate Lat/Long`, into = c("y", "x"), sep = ",")
+
+# As numeric
+Farms$y <- as.numeric(Farms$y)
+Farms$x <- as.numeric(Farms$x)
+
+
+# Remove NA Orders
+Farms <- Farms[!is.na(Farms$Order), ]
+
+#### 3.2 Map visualisation
+
+Category <- Farms[,c("x","y","Category")]
+
+# Convert the data frame to a SpatVector
+Farms_vect <- vect(Category, geom = c("x", "y"), crs = crs(Class))
+
+# Rasterize the farm locations, keeping the order information
+Farms_r <- rasterize(Farms_vect, Class, field = "Category")
+
+Farms_r_df <- as.data.frame(Farms_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
+
+Farms_r_Test <- Farms_r_df %>% drop_na(Category)
+
+# Map the numeric values back to the original order names
+
+raster_df <- as.data.frame(Class, xy = TRUE)
+raster_df <- raster_df[,c(1:3)]
+raster_df$`Hermetia illucens` <- 1
+
+
+plot_farms <- ggplot() +
+  geom_tile(data = raster_df, aes(x = x, y = y, fill = as.factor(`Hermetia illucens` ))) +
+  scale_fill_manual(values = "lightgrey") +  # Set fill color to light grey
+  coord_equal() +  # Keep proportions
+  theme_minimal() +
+  labs(title = "Insect farm location")  +
+  geom_point(data = Farms_r_Test,
+             aes(x = x, y = y, color = Category, shape = Category),
+             size = 3) +
+  scale_color_manual(name = "Farm Category",
+                     values = c("Orthoptera" = "#9A32CD", "Coleoptera" = "#E69F00", "Diptera" = "#00BFFF", "Multiple" = "darkred")) +
+  scale_shape_manual(name = "Farm Order",
+                     values = c("Orthoptera" = 16, "Coleoptera" = 17, "Diptera" = 18, "Multiple" = 15)) +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.title = element_blank(),
+    axis.text = element_text(color = "gray50"),
+    legend.position = "none")
+
+
+# Save the plot
+ggsave(
+  paste0("figures/Farmlocation.jpeg",sep=""),
+  plot_farms,
+  dpi = 500,
+  bg = NULL,
+  width = 15,
+  height = 8.5,
+  units = "in"
+)
+
+
+
+#### 3.3 Histogram
+
+Order <- Farms[,c("x","y","Order")]
+
+# Convert the data frame to a SpatVector
+Order_vect <- vect(Order, geom = c("x", "y"), crs = crs(Rastack))
+
+# Rasterize the farm locations, keeping the order information
+Order_r <- rasterize(Order_vect, Rastack, field = "Order")
+
+Order_r_df <- as.data.frame(Order_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
+
+Order_r_Test <- Order_r_df %>% drop_na(Order)
+
+SuitOrder <- merge(Order_r_Test, Class_df, by = c('x','y'))
+
+Diptera_farms <- SuitOrder %>%
+  filter(Order == "Diptera") %>%
+  dplyr::select('Hermetia illucens', 'Musca domestica') %>%
+  mutate(Diptera_Risk = pmax(`Hermetia illucens`, `Musca domestica`))
+
+final_Dipt <- Diptera_farms %>%
+  group_by(Diptera_Risk) %>%
+  reframe(Order = "Diptera",
+          FarmNumber = n(),
+          Risk_Level = case_when(
+            Diptera_Risk == 0.0 ~ "Low",
+            Diptera_Risk == 0.5 ~ "Intermediate",
+            Diptera_Risk == 1.0 ~ "High"
+          )) %>%
+  select(Order, FarmNumber, Risk_Level) %>%
+  distinct()
+
+
+Coleoptera_farms <- SuitOrder %>%
+  filter(Order == "Coleoptera") %>%
+  dplyr::select(`Tenebrio molitor`, `Alphitobius diaperinus`) %>%
+  mutate(Coleoptera_Risk = pmax(`Tenebrio molitor`, `Alphitobius diaperinus`))
+
+final_Col <- Coleoptera_farms %>%
+  group_by(Coleoptera_Risk) %>%
+  reframe(Order = "Coleoptera",
+          FarmNumber = n(),
+          Risk_Level = case_when(
+            Coleoptera_Risk == 0.0 ~ "Low",
+            Coleoptera_Risk == 0.5 ~ "Intermediate",
+            Coleoptera_Risk == 1.0 ~ "High"
+          )) %>%
+  select(Order, FarmNumber, Risk_Level) %>%
+  distinct()
+
+
+Orthoptera_farms <- SuitOrder %>%
+  filter(Order == "Orthoptera") %>%
+  dplyr::select(`Gryllodes sigillatus`, `Acheta domesticus`, `Locusta migratoria`) %>%
+  mutate(Orthoptera_Risk = pmax(`Gryllodes sigillatus`, `Acheta domesticus`, `Locusta migratoria`))
+
+final_Orth <- Orthoptera_farms %>%
+  group_by(Orthoptera_Risk) %>%
+  reframe(Order = "Orthoptera",
+          FarmNumber = n(),
+          Risk_Level = case_when(
+            Orthoptera_Risk == 0.0 ~ "Low",
+            Orthoptera_Risk == 0.5 ~ "Intermediate",
+            Orthoptera_Risk == 1.0 ~ "High"
+          )) %>%
+  select(Order, FarmNumber, Risk_Level) %>%
+  distinct()
+
+
+Farmsrisk <- rbind(final_Dipt,final_Col )
+Farmsrisk_final <- rbind(Farmsrisk,final_Orth)
+
+
+Farmsrisk_final <- Farmsrisk_final %>%
+  group_by(Order) %>%
+  mutate(Percentage = (FarmNumber / sum(FarmNumber)) * 100)
+
+
+histfarm <- ggplot(Farmsrisk_final, aes(x = Order, y = Percentage, fill = Risk_Level)) +
+  geom_bar(stat = "identity") +
+  theme_minimal() +
+  coord_flip()+
+  scale_fill_manual(
+    name = "Risk",
+    values = c("Low" = "#F5E8C2", "Intermediate" = "#F19134", "High" = "darkred")
+  ) +
+  theme(axis.text.x = element_text(hjust = 1, , size = 20),  # Adjust size for x-axis text
+        axis.text.y = element_text(size = 20),                       # Adjust size for y-axis text
+        axis.title = element_text(size = 14),                         # Adjust size for axis titles
+        legend.text = element_text(size = 12)) +
+  labs(
+    title = "Invasion Risk Levels by farms",
+    x = "Species",
+    y = "Number of farms",
+    fill = "Risk Level"
+  )
+
+ggsave(
+  paste0("figures/Farmrisk.jpeg",sep=""),
+  histfarm,
+  dpi = 500,
+  bg = NULL,
+  width = 15,
+  height = 8.5,
+  units = "in"
+)

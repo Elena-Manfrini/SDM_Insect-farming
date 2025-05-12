@@ -16,13 +16,15 @@ Rastab <- as.data.frame(Rastack, xy=T, na.rm = FALSE) # Take one layer of baseli
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
-i <- 1
+
 # Loop over each species to process occurrence data
  for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   
+  ############# 1. Data preparation
+  
   # Occurrence and environmental values for the species
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final_15_bio6", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
   
   # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
@@ -30,7 +32,7 @@ i <- 1
   
   # Set the number of presence-absence (PA) points and the number of random runs for PA sampling
   number.PA <- nrow(Fin_occ_var) # Number of presence points = Number of pseudo absence points
-  runs.PA <-5 # Number of random runs for pseudo-absence sampling
+  runs.PA <- 5 # Number of random runs for pseudo-absence sampling
   
   # Prepare environmental data for the species 
   cursp.rundata <- Fin_occ_var[,-c(1:2)] # Environmental conditions
@@ -45,7 +47,11 @@ i <- 1
   colnames(pseudoabs.biomod.table) <- paste0("PA", 1:runs.PA) # Column names for each PA run
   pseudoabs.biomod.table[1:nrow(Fin_occ_var), ] <- TRUE # Set the presence points to TRUE
   
+  
+  ############# 2. Pseudo absences selection
+  
   pseudo_only <- data.frame()
+  
   # Loop to sample pseudo-absence points for each run (outside the convex hull and presence pixels)
    for(PA in 1:runs.PA){
     
@@ -69,8 +75,9 @@ i <- 1
                               (nrow(Fin_occ_var) + PA * number.PA), PA] <- TRUE
    }
   
+  ############# 3. Data visualization
   
-  #### Pseudo absence data for visualisation 
+  #### Pseudo absence data for visualization 
   pseudo_only_vis <- rasterize(as.matrix(pseudo_only), Rastack)
   pseudo_only <- as.data.frame(pseudo_only_vis, xy=T, na.rm = FALSE)
 
@@ -79,22 +86,22 @@ i <- 1
   pseudo_only <- pseudo_only[complete.cases(pseudo_only), ] # Remove occurrences outside land
   pseudo_only <- pseudo_only[, c("x","y")]
   
-  #### Convexhull Species
+  #### Convex hull Species
   conv_hull <- cbind(data.frame(cursp.inhull), envir.space$coords)
   conv_hull_filtered <- conv_hull[conv_hull$cursp.inhull != FALSE, ]
   
-  ### Presence outside convhull
+  ### Presence outside convex hull
   pres_outsideconvhull <- cbind(data.frame(presencepixels), envir.space$coords)
   pres_outsideconvhull_filtered <- pres_outsideconvhull[pres_outsideconvhull$presencepixels != FALSE, ]
   
-    
-  ### Visualisation data
-  plot(Rastack[[1]])
-  points(conv_hull_filtered[ , c("x", "y")], pch = 20, cex = 0.5, col = "blue")
-  points(pres_outsideconvhull_filtered[ , c("x", "y")], pch = 20, cex = 0.5, col = "red")
-  points(pseudo_only[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
-  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.5, col = "black")
   
+  visualisation_map <- app(Rastack[[1]], function(x) ifelse(!is.na(x), 1, NA)) # Neutral map
+
+  plot(visualisation_map, col = c("lightgrey"))
+  points(pseudo_only[ , c("x", "y")], pch = 20, cex = 0.2, col = "#4F4F4F")
+  points(conv_hull_filtered[ , c("x", "y")], pch = 20, cex = 0.2, col = "blue")
+  points(Fin_occ_var[ , c("x", "y")], pch = 20, cex = 0.2, col = "yellow")
+
   
   # Create the output directory for models if it doesn't exist
   save_dir <- paste0("models/", Sp)
@@ -102,7 +109,8 @@ i <- 1
     dir.create(save_dir)
   }
   
-  # BIOMOD2 formating data
+  ############# 4. Biomod 2 formating data
+  
   run_data <- BIOMOD_FormatingData(
     resp.name = Sp, 
     resp.var = cursp.rundata$Observed, # Observed data for the species (presence/absence values)
