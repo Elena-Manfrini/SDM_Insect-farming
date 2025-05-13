@@ -1,4 +1,6 @@
 rm(list=ls())
+
+# Libraries
 library(terra)
 library(openxlsx)
 library(ggplot2)
@@ -8,6 +10,7 @@ library(dplyr)
 
 
 ###################### Define computeEnvCombinations function ######################
+
 computeEnvCombinations <- function(env.stack,
                                    var.intervals,
                                    plot = TRUE,
@@ -22,17 +25,14 @@ computeEnvCombinations <- function(env.stack,
   
   combinations <- combinations[complete.cases(combinations), ]
   
-  # All possible combination in the environment
+  # All possible combinations in the environment
   comb.cat <- sapply(colnames(combinations), function(x, combs, seqs.)
     cut(combs[, x], breaks = seqs.[[x]], include.lowest = TRUE, right = FALSE),
-    combs = combinations, seqs. = var.intervals)      
+    combs = combinations, seqs. = var.intervals)
   
   message("Total number of cells with environmental conditions in the geographical space: ", nrow(combinations),
           "\nNumber of duplicated conditions: ", length(which(duplicated(comb.cat))),
           "\nNumber of unique cells (environmental space): ", nrow(comb.cat[-which(duplicated(comb.cat)), ]))
-  
-  
-  #####################################################################################################
   
   # Calculate midpoint values for each environmental variable interval
   possible.combs <- lapply(var.intervals, function(x)
@@ -74,13 +74,13 @@ midpoints <- function(x) {
 
 #########################################################################################
 
-
 ############# 1. Environmental Space
+
 # Load environmental raster stack
 Rastack <- rast("data/final_baseline.tif")
 
 # Get values from the raster stack, including NA for missing values (e.g., ocean areas)
-values <- values(Rastack) 
+values <- values(Rastack)
 combinations <- as.data.frame(values)
 combinations <- combinations[complete.cases(combinations), ] # Remove rows with NA
 
@@ -91,18 +91,18 @@ intervals <- list(
   globalCropland_2010CE = seq(min(combinations[, 4]), max(combinations[, 4]), length.out = 80),
   bio6 = seq(min(combinations[, 5]), max(combinations[, 5]), length.out = 80),
 )
-  
+
 names(intervals) <- names(Rastack)
-  
+
 # Optionally save intervals for each step size as a separate file
 saveRDS(intervals, file = paste0("data/intervals.rds"))
-  
+
 envir.space <- computeEnvCombinations(
-      env.stack = Rastack,
-      var.intervals = intervals,
-      plot = TRUE,
-      vars.to.plot = 1:5
-    )
-    
+  env.stack = Rastack,
+  var.intervals = intervals,
+  plot = TRUE,
+  vars.to.plot = 1:5
+)
+
 # Save environmental space for each step size
 saveRDS(envir.space, file = paste0("data/Environmental_Space.rds"))
