@@ -1,3 +1,6 @@
+rm(list=ls())
+
+# Libraries
 library(terra)
 library(openxlsx)
 library(randomForest)
@@ -14,18 +17,24 @@ Rastack <- rast("data/final_baseline.tif")
 Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
-best_model <- data.frame()
 
-i <-  1
-# Create an empty list to store the rasters for each variable
-species.estimation <- list()
+# Store best models for each species
+best_model_results <- data.frame(
+  species = character(),
+  trees = integer(),
+  mtry = integer(),
+  AUC = numeric(),
+  stringsAsFactors = FALSE
+)
 
 # Loop over each species to process occurrence data
 for (i in 1:length(Vect_Sp)) {
   Sp <- Vect_Sp[[i]] # Current species name
   
   # Occurrence and environmental values for the species
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/final_Occ&Var_", Sp, ".xlsx"))
+  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
+  
+  ############# 1. Pseudoabsences generation
   
   # Convex hull and presence pixels data
   cursp.inhull <- readRDS(paste0("data/convexhull/", Sp, "_cursp.inhull.rds"))
@@ -85,18 +94,26 @@ for (i in 1:length(Vect_Sp)) {
   test <- cursp.rundata[-calibration, ]
   test$Observed <- as.factor(test$Observed)
   
+  print(paste("Species:", Sp))
   print(paste("Training set size:", dim(train)[1]))
   print(paste("Test set size:", dim(test)[1]))
  
+  ## Test several model parameters
+  
     trees <- c(500, 1000, 2000, 3000)
-    mtry <- c(1,2)
-    
-    # Create an empty list to store performance for each combination of trees and mtry
-    true.estimation <- list()
-    
+    mtry <- c(1,2,3)
+
+
+    # Store AUC results
+    model_results <- data.frame(
+      ntrees = integer(),
+      mtry = integer(),
+      AUC = numeric()
+    )
+      
     # Loop over trees and mtry values
     for (j in 1:length(trees)) {
-      ntree <- trees[j]
+      ntrees <- trees[j]
       
       for (k in 1:length(mtry)) {
         nmtry <- mtry[k]
@@ -107,25 +124,36 @@ for (i in 1:length(Vect_Sp)) {
           data = train,   # Training dataset
           importance = TRUE,   # Compute variable importance
           mtry = nmtry,    # Number of variables to try at each split
-          ntree = ntree    # Number of trees
+          ntree = ntrees    # Number of trees
         )
         
-        # Make predictions on the test data
-        pred <- predict(rf_model, test)
+        # Predict probabilities for test set (prob of class 1 = presence)
+        prob_pred <- predict(rf_model, test, type = "prob")[, 2]
+        actual <- as.numeric(as.character(test$Observed))
         
-        # Combine actual and predicted values
-        class_rf <- as.data.frame(cbind(test$Observed, pred))
-        colnames(class_rf)[1] <- "actual_values"
-        colnames(class_rf)[2] <- "predicted_values"
+        # Calculate AUC
+        roc_obj <- roc(actual, prob_pred)
+        auc_value <- as.numeric(auc(roc_obj))
         
-        # Calculate the accuracy for this combination of ntree and mtry
-        accuracy <- (nrow(subset(class_rf, actual_values == 2 & predicted_values == 2)) + 
-                       nrow(subset(class_rf, actual_values == 1 & predicted_values == 1))) / 
-          nrow(class_rf) * 100
-        
-        # Store the result with a unique key combining ntree and mtry
-        true.estimation[[paste("ntree_", ntree, "_mtry_", nmtry, sep = "")]] <- accuracy
+        model_results <- rbind(model_results, data.frame(
+          ntrees = ntrees,
+          mtry = nmtry,
+          AUC = auc_value
+        ))
       }
     }
-    species.estimation[[Sp]] <- true.estimation
+    
+    # Store best model by AUC
+    best_index <- which.max(model_results$AUC)
+    best_model_results <- rbind(best_model_results, data.frame(
+      species = Sp,
+      trees = model_results[best_index, 'ntrees'],
+      mtry = model_results[best_index, 'mtry'],
+      AUC = model_results[best_index, 'AUC'],
+      stringsAsFactors = FALSE
+    ))
 }
+
+
+# Save results
+write.xlsx(best_model_results, "data/best_RF_param.xlsx", rowNames = FALSE)
