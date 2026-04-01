@@ -98,7 +98,7 @@ for (i in 1:length(Vect_Sp)) {
   pres_outsideconvhull_filtered <- pres_outsideconvhull[pres_outsideconvhull$presencepixels != FALSE, ]
   
   
-  # Figure S7
+  # Figure S4
   visualisation_map <- app(Rastack[[1]], function(x) ifelse(!is.na(x), 1, NA)) # Neutral map
   plot(visualisation_map, col = c("lightgrey"))
   points(pseudo_only[, c("x", "y")], pch = 20, cex = 0.2, col = "#4F4F4F")

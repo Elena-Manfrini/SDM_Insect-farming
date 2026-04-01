@@ -1,11 +1,12 @@
 rm(list = ls())
 
 # Libraries
+library(readxl)
 library(openxlsx)
 library(terra)
-library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(dplyr)
 
 
 
@@ -36,26 +37,47 @@ Class_df <- as.data.frame(Class, xy = TRUE)
 # Load insect farm dataset
 
 Farms <- read_excel("data/Insect_farms.xlsx", 
-                    sheet = "Final")
+                    sheet = "SDM")
 
 # Separate lat and long coordinates into 2 columns
 Farms <- Farms %>%
   separate(`Coordonate Lat/Long`, into = c("y", "x"), sep = ",")
 
+
 # As numeric coordinates
 Farms$y <- as.numeric(Farms$y)
 Farms$x <- as.numeric(Farms$x)
 
-############# 3. Map visualization : Figure 5, Panel A
+
+############# 3. Map visualization : Figure 4, Panel A
 
 Category <- Farms[,c("x","y","Category")]
 
-# Convert the data frame to a SpatVector
-Farms_vect <- vect(Category, geom = c("x", "y"), crs = crs(Class))
 
-# Rasterize the farm locations, keeping the order information
-Farms_r <- rasterize(Farms_vect, Class, field = "Category")
-Farms_r_df <- as.data.frame(Farms_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
+# Convert the data frame to a SpatVector
+Category_vect <- vect(Category, geom = c("x", "y"), crs = crs(Class))
+
+Category_extract <- terra::extract(Class, Category_vect, xy=TRUE)
+
+SuitCategory <- cbind(Category_extract, Category[,3])
+
+
+### Remove farm location where there is no suitability values
+SuitCategory <- SuitCategory[complete.cases(SuitCategory),]
+
+SuitCategory <- SuitCategory <- SuitCategory %>%
+  rowwise() %>%  # work row by row
+  mutate(
+    Risk = case_when(
+      Category == "Diptera" ~ max(`Hermetia illucens`, `Musca domestica`, na.rm = TRUE),
+      Category == "Coleoptera" ~ max(`Tenebrio molitor`, `Alphitobius diaperinus`, na.rm = TRUE),
+      Category == "Orthoptera" ~ max(`Gryllodes sigillatus`, `Acheta domesticus`, `Locusta migratoria`, na.rm = TRUE),
+      Category == "Multiple\r\n" ~ max(`Gryllodes sigillatus`, `Acheta domesticus`, `Locusta migratoria`,`Tenebrio molitor`, `Alphitobius diaperinus`, `Hermetia illucens`, `Musca domestica`, na.rm = TRUE),
+      TRUE ~ NA_real_  # For other categories, you can set NA or another rule
+    ),
+    Risk = factor(Risk)  # Convert numeric max to factor
+  ) %>%
+  ungroup()
 
 # Map preparation
 raster_df <- Class_df[,c(1:3)]
@@ -63,18 +85,18 @@ raster_df$`Hermetia illucens` <- 1 # Unique value for a unique color (plot)
 
 # Map
 plot_farms <- ggplot() +
-  geom_tile(data = raster_df, aes(x = x, y = y, fill = as.factor(`Hermetia illucens` ))) +
+  geom_tile(data = raster_df, aes(x = x, y = y, fill = as.factor(`Hermetia illucens`))) +
   scale_fill_manual(values = "lightgrey") +  # Set fill color to light grey
   coord_equal() +  # Keep proportions
   theme_minimal() +
   labs(title = "Insect farm location")  +
-  geom_point(data = Farms_r_df,
-             aes(x = x, y = y, color = Category, shape = Category),
+  geom_point(data = SuitCategory,
+             aes(x = x, y = y, color = Risk, shape = Category),
              size = 3) +
-  scale_color_manual(name = "Farm Category",
-                     values = c("Orthoptera" = "#9A32CD", "Coleoptera" = "#E69F00", "Diptera" = "#00BFFF", "Multiple" = "darkred")) +
-  scale_shape_manual(name = "Farm Order",
-                     values = c("Orthoptera" = 16, "Coleoptera" = 17, "Diptera" = 18, "Multiple" = 15)) +
+  scale_color_manual(name = "Risk",
+                     values = c("0" = "#F5E8C2", "0.5" = "#F19134", "1" = "darkred")) +
+  scale_shape_manual(name = "Farm Category",
+                     values = c("Orthoptera" = 16, "Coleoptera" = 17, "Diptera" = 18, "Multiple\r\n" = 15)) +
   theme(
     plot.title = element_text(size = 18, face = "bold"),
     axis.title = element_blank(),
@@ -84,7 +106,7 @@ plot_farms <- ggplot() +
 
 # Save the plot
 ggsave(
-  paste0("figures/Farmlocation.jpeg",sep=""),
+  paste0("figures/Farmlocation_V4.jpeg",sep=""),
   plot_farms,
   dpi = 500,
   bg = NULL,
@@ -94,29 +116,32 @@ ggsave(
 )
 
 
-############# 4. Histogram : Figure 5, Panel B
+
+
+############# 4. Histogram : Figure 4, Panel B
 # Percentage of farms in different risk categories
 
-# Load environmental raster stack
-Rastack <- rast("data/final_baseline.tif")
 
 Order <- Farms[,c("x","y","Order")]
 
+
 # Convert the data frame to a SpatVector
-Order_vect <- vect(Order, geom = c("x", "y"), crs = crs(Rastack))
+Order_vect <- vect(Order, geom = c("x", "y"), crs = crs(Class))
 
-# Rasterize the farm locations, keeping the order information
-Order_r <- rasterize(Order_vect, Rastack, field = "Order")
+Order_extract <- terra::extract(Class, Order_vect, xy=TRUE)
 
-Order_r_df <- as.data.frame(Order_r, xy=T, na.rm = FALSE) # Convert to data frame with coordinates
+SuitOrder <- cbind(Order_extract, Order[,3])
 
-SuitOrder <- merge(Order_r_df, Class_df, by = c('x','y'))
+
+### Remove farm location where there is no suitability values
+SuitOrder <- SuitOrder[complete.cases(SuitOrder),]
+
 
 ## 4.1 Diptera species formatting 
 
-Diptera_farms <- SuitOrder %>%
-  filter(Order == "Diptera") %>%
-  dplyr::select('Hermetia illucens', 'Musca domestica') %>%
+Diptera_farms <- SuitCategory %>%
+  filter(Category == "Diptera") %>%
+  select('Hermetia illucens', 'Musca domestica') %>%
   mutate(Diptera_Risk = pmax(`Hermetia illucens`, `Musca domestica`))
 
 final_Dipt <- Diptera_farms %>%
@@ -201,7 +226,7 @@ histfarm <- ggplot(Farmsrisk_final, aes(x = Order, y = Percentage, fill = Risk_L
   )
 
 ggsave(
-  paste0("figures/Farmrisk.jpeg",sep=""),
+  paste0("figures/Farmrisk_V2.jpeg",sep=""),
   histfarm,
   dpi = 500,
   bg = NULL,

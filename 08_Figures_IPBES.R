@@ -108,6 +108,7 @@ Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
 Species_class <- data.frame() # Store the number of country in each risk category per species 
+Surface_class <- data.frame()
 
 raster_list <- list() # Save class projection of all species
 
@@ -117,6 +118,17 @@ for (i in 1:7) {
   
   # Read class projections
   Class_projection <- rast(paste0("output/Suitability/", Sp, "_class_ens_mod.tif"))
+  
+  ### Suitability class surface
+  surface <- expanse(Class_projection, unit="km", transform=TRUE, byValue=TRUE,
+          zones=NULL, wide=FALSE, usenames=FALSE)
+  
+  colnames(surface) <- c("Species", "Suitability", "surface_Km")
+  surface['Species'][surface['Species'] == 1] <- Sp
+    
+  Surface_class <- rbind(Surface_class, surface)
+  
+  ####### countries
   
   raster_list[[Sp]] <- Class_projection
   
@@ -158,14 +170,20 @@ for (i in 1:7) {
   # Add a column indicating the most frequently occurring Suitability category.
   col_name <- paste0("Most_Frequent_Suitability_", Sp)
   
-  Class_IPBES_Country_sp_freq <- Class_IPBES_Country_sp %>%
+  Class_IPBES_Country_sp_freq <- Class_IPBES %>%
     group_by(Area) %>%
-    mutate(!!col_name := factor(Suitability[which.max(tabulate(match(Suitability, unique(Suitability))))],
-                                levels = levels(Suitability))) %>%
+    mutate(
+      !!col_name := {
+        tab <- table(Suitability)
+        if (length(tab) == 0) NA_character_
+        else names(sort(tab, decreasing = TRUE))[1]
+      }
+    ) %>%
     ungroup()
+
   
   # Keep only one row per country
-  unique_country <- unique(Class_IPBES_Country_sp_freq[,c(2,3)])
+  unique_country <- unique(Class_IPBES_Country_sp_freq[,c(2,5)])
   
   # Dataframe of suitability the most frequent risk class per species per country
   IPBESCountry_Freq <- merge(IPBESCountry_Freq, unique_country, by = "Area")
@@ -196,7 +214,7 @@ for (i in 1:7) {
   
   ### 2.2 Data preparation for IPBES SubRegions
   ## Percentage of suitability classes per SubRegions
-  
+
   ## Calculate total count per area
   Perc_suit_SubRegion <- Class_IPBES %>%
     group_by(Sub_Region, Suitability) %>%
@@ -205,18 +223,18 @@ for (i in 1:7) {
     mutate(Percentage = (Count / sum(Count)) * 100) %>% ### Percentage of each category per Area
     select(-Count) %>% # Remove the column
     pivot_wider(names_from = Suitability, values_from = Percentage, values_fill = 0) ## Suitability in column
-  
+
   Perc_suit_SubRegion <- Perc_suit_SubRegion %>%
     rename_with(~ paste0(c("Low_risk_", "Intermediate_risk_", "High_risk_"), Sp), .cols = c("0", "0.5", "1"))
-  
+
   # Dataframe of suitability class percentages per species per Subregions
   IPBESubReg_all <- merge(IPBESubReg_all, Perc_suit_SubRegion, by = "Sub_Region")
-  
-  
-  
+
+
+
   ### 2.3 Data preparation for IPBES Regions
   ## Percentage of suitability classes per Regions
-  
+
   # Calculate total count per area
   Perc_suit_Region <- Class_IPBES %>%
     group_by(Regions, Suitability) %>%
@@ -225,10 +243,10 @@ for (i in 1:7) {
     mutate(Percentage = (Count / sum(Count)) * 100) %>% ### Percentage of each category per Area
     select(-Count) %>% # Remove the column
     pivot_wider(names_from = Suitability, values_from = Percentage, values_fill = 0) ## Suitability in column
-  
+
   Perc_suit_Region <- Perc_suit_Region %>%
     rename_with(~ paste0(c("Low_risk_", "Intermediate_risk_", "High_risk_"), Sp), .cols = c("0", "0.5", "1"))
-  
+
   # Add new column and assign name separately
   IPBESReg_all <- merge(IPBESReg_all, Perc_suit_Region, by = "Regions")
   
@@ -236,9 +254,13 @@ for (i in 1:7) {
 
 ##### Save data frames
 ### Number of countries per suitability class for all species
+
+
 Species_class <- as.data.frame(Species_class)
+Surface_class <- as.data.frame(Surface_class)
 
 xlsx::write.xlsx(Species_class, "data/NbCountry-per-suitCat_All-sp.xlsx", row.names = F)
+xlsx::write.xlsx(Surface_class, "data/Surface-per-suitCat_All-sp.xlsx", row.names = F)
 
 ### Percentage of class category for all countries per species
 xlsx::write.xlsx(IPBESCountry_Perc, "data/Perc-suitCat_percountry_All-sp.xlsx", row.names = F)
@@ -252,30 +274,33 @@ xlsx::write.xlsx(IPBESReg_all, "data/Perc-suitCat_perRegions_All-sp.xlsx", row.n
 
 ############# 3. IPBES figures
 
-### 3.1 Figure 3 : Number of countries in each invasion risk category
+### 3.1 Figure 2 : Terrestrial surface (left) and number of countries (right) in each invasion risk category. 
 
-Species_class <- read.xlsx("data/NbCountry-per-suitCat_All-sp.xlsx")
+### Right panel : Surface of invasion risks
 
-colnames(Species_class) <- sub(paste0("_risk"), "", colnames(Species_class))
-Species_class <- Species_class[,c(1,4,3,2)]
-
-reshaped_data <- Species_class %>%
-  pivot_longer(
-    cols = starts_with("High") | starts_with("Intermediate") |  starts_with("Low") ,
-    names_to = "Risk_Level",
-    values_to = "number"
+Surface_class_cat <- Surface_class %>% 
+  rename(Risk_Level  = Suitability) %>%
+  mutate(Risk_Level = as.character(Risk_Level)) %>%
+  mutate(
+    Risk_Level = case_when(
+      Risk_Level == "0" ~ "Low",
+      Risk_Level == "0.5" ~ "Intermediate",
+      Risk_Level == "1"   ~ "High",
+      TRUE ~ Risk_Level
+    )
   )
 
-desired_orders <- rev(c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus", 
-                        "Alphitobius diaperinus", "Musca domestica", 
-                        "Gryllodes sigillatus", "Locusta migratoria"))
 
-reshaped_data$Species <- factor(reshaped_data$Species, levels = desired_orders)
-reshaped_data_ordered <- reshaped_data[order(reshaped_data$Species), ]
+Surface_class_cat$Species <- factor(Surface_class_cat$Species, levels = rev(desired_orders))
+reshaped_data_ordered <- Surface_class_cat[order(Surface_class_cat$Species), ]
 
+reshaped_data_ordered$Risk_Level <- factor(
+  reshaped_data_ordered$Risk_Level,
+  levels = c("High", "Intermediate", "Low")
+)
 
 # Create the bar chart
-histspnbcountry <- ggplot(reshaped_data, aes(x = Species, y = number, fill = Risk_Level)) +
+histsurfcountry <- ggplot(reshaped_data_ordered, aes(x = Species, y = surface_Km, fill = Risk_Level )) +
   geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
   theme_minimal() +
   coord_flip() +
@@ -291,10 +316,66 @@ histspnbcountry <- ggplot(reshaped_data, aes(x = Species, y = number, fill = Ris
   ) +
   labs(
     x = "Species",
+    y = "Area (km2)",
+    fill = "Risk Level"
+  ) +
+  scale_y_continuous(n.breaks=6)
+
+
+ggsave(
+  paste0("figures/SurfaceRisk.jpeg",sep=""),
+  histsurfcountry,
+  dpi = 500,
+  bg = NULL,
+  width = 15,
+  height = 8.5,
+  units = "in"
+)
+
+
+### Left panel: Number of countries
+
+Species_class <- read.xlsx("data/NbCountry-per-suitCat_All-sp.xlsx")
+
+colnames(Species_class) <- sub(paste0("_risk"), "", colnames(Species_class))
+Species_class <- Species_class[,c(1,4,3,2)]
+
+reshaped_data <- Species_class %>%
+  pivot_longer(
+    cols = starts_with("Low") | starts_with("Intermediate") |  starts_with("High") ,
+    names_to = "Risk_Level",
+    values_to = "Country_Number"
+  )
+
+desired_orders <- rev(c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus",
+                        "Alphitobius diaperinus", "Musca domestica",
+                        "Gryllodes sigillatus", "Locusta migratoria"))
+
+reshaped_data$Species <- factor(reshaped_data$Species, levels = desired_orders)
+reshaped_data_ordered <- reshaped_data[order(reshaped_data$Species), ]
+
+
+
+# Create the bar chart
+histspnbcountry <- ggplot(reshaped_data_ordered, aes(x = Species, y = number, fill = Risk_Level)) +
+  geom_bar(stat = "identity", position = position_stack(reverse = TRUE)) +
+  theme_minimal() +
+  coord_flip() +
+  scale_fill_manual(
+    name = "Risk",
+    values = c("Low" = "#F5E8C2", "Intermediate" = "#F19134",  "High" = "darkred")
+  ) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, size = 12),  # Adjust size for x-axis text
+    axis.text.y = element_text(size = 12),                       # Adjust size for y-axis text
+    axis.title = element_text(size = 14),                         # Adjust size for axis titles
+    legend.text = element_text(size = 12)                     # Adjust size for legend title
+  ) +
+  labs(
+    x = "Species",
     y = "Number of country",
     fill = "Risk Level"
   )
-
 
 ggsave(
   paste0("figures/NbCountryRisk.jpeg",sep=""),
@@ -305,6 +386,9 @@ ggsave(
   height = 8.5,
   units = "in"
 )
+
+
+
 
 ### 3.2 Figure 3 : Percentage of invasion risk of all IPBES sub-regions.
 

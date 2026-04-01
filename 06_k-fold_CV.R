@@ -115,7 +115,7 @@ for (i in 1:length(Vect_Sp)) {
   saveRDS(myBiomodModelOut, file = paste0("models/", Sp, "/output_models.rds"))
 
   
-  ### 3.1 Response curves : Figure S4, Panel A
+  ### 3.1 Response curves : Figure S5, Panel A
   
   ## Get the evaluation results for each model
   evals <- get_evaluations(myBiomodModelOut)
@@ -202,7 +202,7 @@ for (i in 1:length(Vect_Sp)) {
          units = "in")
 
 
-  ### 3.2 Variable importance : Figure S4, Panel B
+  ### 3.2 Variable importance : Figure S5, Panel B
 
   gg_varimp <- get_variables_importance(myBiomodModelOut)
   
@@ -249,7 +249,7 @@ write.xlsx(BOYCEvaluation, file = "output/BOYCEvaluation.xlsx")
 
 
 
-############# 3. BOYCE evaluation visualization (Figure S3)
+############# 3. BOYCE evaluation visualization (Figure S8)
 
 
 Vect_Sp <- rev(c("Hermetia illucens", "Tenebrio molitor", "Acheta domesticus",
