@@ -17,7 +17,13 @@ Species <- read.xlsx("data/Species_names.xlsx")
 Vect_Sp <- Species$Vect_Sp
 
 # Save Highest risk categories for all species 
-Projection_class_sp.all <- data.frame()
+Projection_class_high_sp.all <- data.frame()
+
+# Save Intermediate risk categories for all species 
+Projection_class_int_sp.all <- data.frame()
+
+# Read the shapefile
+land <- vect("data/raw/ne_10m_land.shp")
 
 # Loop over each species to process occurrence data
 for (i in 1:7) {
@@ -26,10 +32,10 @@ for (i in 1:7) {
   # Load pre-trained model outputs for the species
   myBiomodModelOut <- readRDS(paste0("models/", Sp, "/output_models.RDS"))
   selected_models <- readRDS(paste0("models/", Sp, "/selected_models.RDS"))
-  
+
   # Remove XGBOOST & GAM models for projection
   selected_models_f <- selected_models[!grepl("XGBOOST", selected_models) & !grepl("GAM", selected_models)]
-  
+
 
   ############# 1. Projection of individual models
 
@@ -40,12 +46,12 @@ for (i in 1:7) {
     models.chosen = selected_models_f, # Only use selected models.
     build.clamping.mask = TRUE,
     output.format = ".tif")
-  
+
   # Load suitability projection raster
   Projection_raw <- rast(paste0("models", "/", Sp, "/", gsub(" ", ".", Sp),
                                 "/proj_", Sp, "_Projection",
                                 "/proj_", Sp, "_Projection_", gsub(" ", ".", Sp), ".tif"))
-  
+
   # Ensure no negative values in the raster
   Projection_raw <- app(Projection_raw, function(x) {
     x[x < 0] <- 0 # Replace negative values with 0.
@@ -55,42 +61,42 @@ for (i in 1:7) {
   ############# 2. Suitability raster
 
   ### 2.1 Projection Mean : Ensemble model
-  
+
   Projection_ens <- mean(Projection_raw) # Calculate mean suitability across layers : Ensemble model
   names(Projection_ens) <- c("Suitability")
-  
+
   # Save data frame
   # Create species-specific directories
   save_dir <- paste0("output/", "Suitability")
   if (!dir.exists(save_dir)) {
     dir.create(save_dir)
   }
-  
+
   # Save raster of suitability
   writeRaster(Projection_ens, filename = paste0(save_dir, "/", Sp, "_ens_mod.tif"))
-  
+
   # Convert raster to data frame for plotting
   raster_df <- as.data.frame(Projection_ens, xy = TRUE)
-  
-  
-  ### 2.2 Projection Standard deviation 
-  
+
+
+  ### 2.2 Projection Standard deviation
+
   Projection_sd <- app(Projection_raw, sd) # Calculate standard deviation across layers.
   names(Projection_sd) <- c("Standard_deviation")
-  
+
   # Save raster of standard deviation
   writeRaster(Projection_sd, filename = paste0("output/Suitability/", Sp, "sd_ens_mod.tif"))
-  
+
   # Convert standard deviation raster to data frame for plotting
   raster_sd_df <- as.data.frame(Projection_sd, xy = TRUE)
- 
+
   ### 2.3 Plots
 
-  ## 2.3.1 Suitability map : Figure S5, Panel A
-  
+  ## 2.3.1 Suitability map : Figure S1, Panel A
+
   # Species occurrences to get coordinates
-  Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
-  
+   Fin_occ_var <- read.xlsx(paste0("data/filtered_occurences/Occ&Var_final", Sp, ".xlsx"))
+
   # Map
   plot_raster <- ggplot() +
     geom_tile(data = raster_df, aes(x = x, y = y, fill = Suitability)) +
@@ -111,19 +117,19 @@ for (i in 1:7) {
       axis.text = element_text(color = "gray50"),
       legend.position = "right",
       legend.key.height = unit(1, "cm"))
-  
+
   # Create output directory for figures if it doesn't exist
   Save_dir_fig <- "figures"
   if (!dir.exists(Save_dir_fig)) {
     dir.create(Save_dir_fig)
   }
-  
+
   # Create species-specific directories
   save_dir <- paste0("figures/", Sp)
   if (!dir.exists(save_dir)) {
     dir.create(save_dir)
   }
-  
+
   # Save the plot
   ggsave(
     paste0(save_dir, "/Plot_Raster.jpeg", sep = ""),
@@ -134,9 +140,9 @@ for (i in 1:7) {
     height = 8.5,
     units = "in"
   )
-  
-  ## 2.2.1 Standard deviation map : Figure S5, Panel B
-  
+
+  ## 2.2.1 Standard deviation map : Figure S1, Panel B
+
   # Plot standard deviation raster
   plot_raster_sd <- ggplot() +
     geom_tile(data = raster_sd_df, aes(x = x, y = y, fill = Standard_deviation)) +
@@ -153,7 +159,7 @@ for (i in 1:7) {
       axis.text = element_text(color = "gray50"),
       legend.position = "right",
       legend.key.height = unit(1, "cm"))
-  
+
   # Save the standard deviation plot
   ggsave(
     paste0("figures/", Sp, "/Plot_Raster_Standard-deviation.jpeg", sep = ""),
@@ -164,18 +170,18 @@ for (i in 1:7) {
     height = 8.5,
     units = "in"
   )
-    
 
-  
+
+
   ############# 3. Risk raster
-  
-  ### 2.1 Risk classification : Figure S6, Panel A
-    
+
+  ### 2.1 Risk classification : Figure S2, Panel A
+
   ## Extract occurrences coordinates associated with suitability estimation
   Occu_Suit <- terra::extract(Projection_ens,
                               Fin_occ_var[, 1:2],
                               ID = FALSE)
-  
+
   # Calculate occurrences quantiles (5% and 25%)
   quantiles <- quantile(Occu_Suit$Suitability, probs = c(0.05, 0.25))
   
@@ -198,7 +204,7 @@ for (i in 1:7) {
       axis.text.x = element_text(size = 15),  # X axis tick labels size
       axis.text.y = element_text(size = 15)   # Y axis tick labels size
     )
-  
+
   # Save the plot
   ggsave(
     paste0("figures/", Sp, "/DensityplotClass.jpeg", sep = ""),
@@ -209,32 +215,34 @@ for (i in 1:7) {
     height = 8.5,
     units = "in"
   )
-  
-  ### 2.2 Risk classification map visualization : Figure S6, Panel B
-      
+
+   ### 2.2 Risk classification map visualization : Figure S2, Panel B
+
   # Classify raster values based on quantiles
   # Risk categories :
   # 0 -> 5% = Low or Unknown
   # 5 -> 25% = Intermediate
   # 25 -> 100% = High
-  
+
   Projection_class <- Projection_ens
-  
+
   Projection_class[Projection_class$Suitability < (quantiles[["5%"]])] <- 0
   Projection_class[Projection_class$Suitability >= quantiles[["5%"]] &
                      Projection_class$Suitability < quantiles[["25%"]]] <- 0.5
   Projection_class[Projection_class$Suitability >= quantiles[["25%"]]] <- 1
-  
+
   # Save the Projection_class models
   writeRaster(Projection_class, filename = paste0("output/Suitability/", Sp, "_class_ens_mod.tif"))
-  
+
+
+
   # Convert classified raster to data frame for plotting
   Projection_Class <- as.data.frame(Projection_class, xy = TRUE)
-  
-    
+
+
   # Plot of map risk categories
   plot_raster_Class <- ggplot() +
-    geom_tile(data = Projection_Class, aes(x = x, y = y, fill = factor(Suitability))) +
+    geom_tile(data = Projection_class, aes(x = x, y = y, fill = factor(Suitability))) +
     scale_fill_manual(
       name = "Suitability",
       values = c("0" = "#F5E8C2", "0.5" = "#F19134", "1" = "darkred"),  # Choose preferred colors
@@ -253,7 +261,7 @@ for (i in 1:7) {
       axis.text = element_text(color = "gray50"),
       legend.position = "right",
       legend.key.height = unit(1, "cm"))
-  
+
   ggsave(
     paste0("figures/", Sp, "/Plot_RasterClass.jpeg", sep = ""),
     plot_raster_Class,
@@ -267,39 +275,75 @@ for (i in 1:7) {
   ############# 3. Highest risk categories
   # Collect all High risk of species
 
-  Projection_class_sp <- Projection_ens
-  Projection_class_sp[Projection_class_sp$Suitability < quantiles[["25%"]]] <- 0
-  Projection_class_sp[Projection_class_sp$Suitability >= quantiles[["25%"]]] <- 1
+  Projection_ens <- rast(paste0(save_dir, "/", Sp, "_ens_mod.tif"))
+
+  Projection_class_high_sp <- Projection_ens
+
+  Projection_class_high_sp[Projection_class_high_sp$Suitability < quantiles[["25%"]]] <- 0
+  Projection_class_high_sp[Projection_class_high_sp$Suitability >= quantiles[["25%"]]] <- 1
+
+  # Convert classified raster to data frame for plotting
+  Projection_class_high_sp <- as.data.frame(Projection_class_high_sp, xy = TRUE)
+  colnames(Projection_class_high_sp) <- c("x", "y", "Hightsuit")
+
+  # Add a column to track the species name
+  Projection_class_high_sp$species <- Sp
+
+  # Append to Projection_class_sp.all
+  Projection_class_high_sp.all <- rbind(Projection_class_high_sp.all, Projection_class_high_sp)
+
+  
+  # Collect all Intermediate risk of species
+  
+  Projection_class_int_sp <- Projection_ens
+  
+  # Initialize all cells to 0
+  Projection_class_int_sp[] <- 0
+  
+
+  # Assign 1 to cells between 5% and 25% quantiles
+  Projection_class_int_sp[Projection_ens[] >= quantiles[["5%"]] & 
+                            Projection_ens[] < quantiles[["25%"]]] <- 1
+  
+  ## Rastack with values only for land
+  Projection_class_int_sp <- mask(Projection_class_int_sp, land)
+  
   
   # Convert classified raster to data frame for plotting
-  Projection_class_sp <- as.data.frame(Projection_class_sp, xy = TRUE)
-  colnames(Projection_class_sp) <- c("x", "y", "Hightsuit")
+  Projection_class_int_sp <- as.data.frame(Projection_class_int_sp, xy = TRUE)
+  colnames(Projection_class_int_sp) <- c("x", "y", "Intsuit")
   
   # Add a column to track the species name
-  Projection_class_sp$species <- Sp
+  Projection_class_int_sp$species <- Sp
   
   # Append to Projection_class_sp.all
-  Projection_class_sp.all <- rbind(Projection_class_sp.all, Projection_class_sp)
+  Projection_class_int_sp.all <- rbind(Projection_class_int_sp.all, Projection_class_int_sp)
+  
 }
 
 
-### 3.1 Plot of cumulated High risk for all species : Figure 2
 
-# Sum high risk of all species
-Nbsp_Highsuit <- Projection_class_sp.all %>%
+
+### 3.1 Plot of cumulated intermediate invasion risk for all species : Figure 1A
+
+# Sum intermediate risk of all species
+Nbsp_Intsuit <- Projection_class_int_sp.all %>%
   group_by(x, y) %>%
-  summarize(Nb_sp = sum(Hightsuit), .groups = "drop")
+  summarize(Nb_sp = sum(Intsuit), .groups = "drop")
 
-Nbsp_Highsuit$Nb_sp <- as.factor(Nbsp_Highsuit$Nb_sp)
+Nbsp_Intsuit$Nb_sp <- as.factor(Nbsp_Intsuit$Nb_sp)
 
 # Map
-  HighSuit_allsp <- ggplot() +
-    geom_tile(data = Nbsp_Highsuit, aes(x = x, y = y, fill = Nb_sp)) +
-    scale_fill_brewer(
-      name = "Number of species with high suitability",
-      palette = "YlOrRd",  # Use the YlOrRd palette
-      direction = 1        # Colors go from low to high values
-    ) +
+  IntSuit_allsp <- ggplot() +
+    geom_tile(data = Nbsp_Intsuit, aes(x = x, y = y, fill = Nb_sp)) +
+    # scale_fill_brewer(
+    #   name = "Number of species with intermediate suitability",
+    #   palette = "YlOrBr",  # Use the YlOrRd palette
+    #   direction = 1        # Colors go from low to high values
+    # ) +
+    scale_fill_manual(name = "Nb_sp",
+                       values = c("0" = "#FFFFE5",  "1" = "#FFF7BC", "2" = "#FEE391", "3" = "#FEC44F", "4" = "#EC7014", "5" = "#CC4C02")) +
+  
     coord_equal() +  # Keep proportions
     theme_minimal() +
     labs(title = "") +
@@ -312,8 +356,8 @@ Nbsp_Highsuit$Nb_sp <- as.factor(Nbsp_Highsuit$Nb_sp)
     )
 
   ggsave(
-    paste0("figures/Plot_RasterClass_allSP.jpeg",sep=""),
-    HighSuit_allsp,
+    paste0("figures/Plot_RasterClass_Int_allSP.jpeg",sep=""),
+    IntSuit_allsp,
     dpi = 500,
     bg = NULL,
     width = 15,
@@ -321,3 +365,45 @@ Nbsp_Highsuit$Nb_sp <- as.factor(Nbsp_Highsuit$Nb_sp)
     units = "in"
   )
   
+  
+
+
+### 3.2 Plot of cumulated high invasion risk for all species : Figure 1B
+
+# Sum high risk of all species
+Nbsp_Highsuit <- Projection_class_high_sp.all %>%
+  group_by(x, y) %>%
+  summarize(Nb_sp = sum(Hightsuit), .groups = "drop")
+
+Nbsp_Highsuit$Nb_sp <- as.factor(Nbsp_Highsuit$Nb_sp)
+
+# Map
+HighSuit_allsp <- ggplot() +
+  geom_tile(data = Nbsp_Highsuit, aes(x = x, y = y, fill = Nb_sp)) +
+  # scale_fill_brewer(
+  #   name = "Number of species with high suitability",
+  #   palette = "YlOrBr",  # Use the YlOrRd palette
+  #   direction = 1        # Colors go from low to high values
+  # ) +
+  scale_fill_manual(name = "Nb_sp",
+                     values = c("0" = "#FFFFE5", "1" = "#FFF7BC", "2" = "#FEE391", "3" = "#FEC44F", "4" = "#EC7014", "5" = "#CC4C02", "6" = "#993404", "7" = "#662506")) +
+  coord_equal() +  # Keep proportions
+  theme_minimal() +
+  labs(title = "") +
+  theme(
+    plot.title = element_text(size = 18, face = "bold"),
+    axis.title = element_blank(),
+    axis.text = element_text(color = "gray50"),
+    legend.position = "right",
+    legend.key.height = unit(1, "cm")
+  )
+
+ggsave(
+  paste0("figures/Plot_RasterClass_allSP.jpeg",sep=""),
+  HighSuit_allsp,
+  dpi = 500,
+  bg = NULL,
+  width = 15,
+  height = 8.5,
+  units = "in"
+)
